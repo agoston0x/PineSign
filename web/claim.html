@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claim a file · PineSign</title>
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero">
+      <img src="assets/pine.png" alt="" />
+      <div>
+        <h1>A file for you</h1>
+        <p class="tagline" id="subtitle">Checking the transfer…</p>
+      </div>
+    </div>
+
+    <section class="panel" id="details" hidden>
+      <h2>The transfer</h2>
+      <dl class="facts">
+        <dt>File</dt><dd id="f-name">—</dd>
+        <dt>Size</dt><dd id="f-size">—</dd>
+        <dt>From</dt><dd class="mono" id="f-sender">—</dd>
+        <dt>Stored at</dt><dd class="mono" id="f-ref">—</dd>
+        <dt>Expires</dt><dd id="f-expires">—</dd>
+      </dl>
+    </section>
+
+    <section class="panel" id="identity-panel" hidden>
+      <h2>Your key</h2>
+      <p class="hint" id="identity-hint">This is the key that will open the file.</p>
+      <code class="key" id="pubkey">…</code>
+    </section>
+
+    <section class="panel" id="action-panel" hidden>
+      <h2>Accept</h2>
+      <p class="hint">
+        Accepting decrypts the file on this device and writes a receipt that cannot be
+        edited or withdrawn — by you or by the sender.
+      </p>
+      <button class="primary wide" id="accept">Accept and download</button>
+      <p class="status" id="status"></p>
+
+      <div class="receipt" id="receipt" hidden>
+        <h3>Delivered</h3>
+        <dl class="facts">
+          <dt>Claimed</dt><dd id="r-time">—</dd>
+          <dt>Contents</dt><dd class="mono" id="r-hash">—</dd>
+          <dt>Receipt</dt><dd class="mono" id="r-sig">—</dd>
+        </dl>
+      </div>
+    </section>
+
+    <p class="foot"><a href="/">What is PineSign?</a></p>
+  </main>
+
+  <script type="module" src="claim.bundle.js"></script>
+</body>
+</html>

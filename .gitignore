@@ -1,0 +1,13 @@
+node_modules/
+.storage/
+.env
+*.log
+
+# Working images, not part of the build
+IMG_*.jpg
+*.HEIC
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/lib/

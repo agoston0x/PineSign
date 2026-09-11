@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PineSign</title>
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero">
+      <img src="assets/pine.png" alt="" />
+      <div>
+        <h1>PineSign</h1>
+        <p class="tagline">Encrypted here. Proven there.</p>
+      </div>
+    </div>
+
+    <p class="lede">
+      Send a file so that both of you can prove it happened. It is encrypted on your
+      machine before it leaves, stored on Swarm only as long as it needs to be, and
+      the record of delivery is <strong>written once and never editable</strong> —
+      not by us, not by you.
+    </p>
+
+    <section class="panel">
+      <h2>How a transfer works</h2>
+      <ol class="steps">
+        <li>
+          <div>
+            <h3>Alice encrypts on her own machine</h3>
+            <p>The extension derives a key from her private key and Bob's public one. Nothing readable leaves her computer, and no key is ever transmitted.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>The gateway pays for the storage</h3>
+            <p>It uploads the ciphertext to Swarm and covers the postage. Bob and Alice never touch a stamp, a token, or a node — and the gateway never sees the file.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Bob claims it, or it disappears</h3>
+            <p>He decrypts, and proves he did by revealing something only the plaintext yields. If he never claims, the blob and its link expire together. Nothing to delete.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="panel">
+      <h2>Your key</h2>
+      <p class="hint">Give this to anyone who wants to send you a file. It is generated in your browser and never leaves it.</p>
+      <code class="key" id="pubkey">…</code>
+      <div class="row">
+        <button class="ghost" id="copy-key">Copy key</button>
+        <button class="ghost" id="new-key">Generate a new one</button>
+      </div>
+    </section>
+
+    <p class="foot">
+      Built at ETHRome 2026 · Swarm for storage, ENS for the namespace, one write-once contract for the receipt.
+    </p>
+  </main>
+
+  <script type="module" src="home.bundle.js"></script>
+</body>
+</html>
