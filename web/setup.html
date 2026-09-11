@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Set up · PineSign</title>
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero">
+      <img src="assets/pine.png" alt="" />
+      <div>
+        <h1>Set up this server</h1>
+        <p class="tagline" id="subtitle">Checking…</p>
+      </div>
+    </div>
+
+    <section class="panel" id="locked" hidden>
+      <h2>Setup token required</h2>
+      <p class="hint">
+        The server printed a setup link to its console when it started. Open that link,
+        or paste the token here.
+      </p>
+      <label for="token">Token</label>
+      <input id="token" type="text" placeholder="the token from your server console" spellcheck="false" />
+      <div class="row"><button class="primary" id="unlock">Unlock</button></div>
+      <p class="status" id="lock-status"></p>
+    </section>
+
+    <!-- 1: name -->
+    <section class="panel step" id="step-name" hidden>
+      <h2><span class="num">1</span> Choose a name</h2>
+      <p class="hint">
+        Every user of this server gets a subname under it — <code>alice.yourname.eth</code>
+        — and their encryption key is published in its records. Pick a name you own or
+        can register on Sepolia.
+      </p>
+      <label for="name">Parent name</label>
+      <input id="name" type="text" placeholder="pinesign.eth" spellcheck="false" />
+      <p class="resolved" id="name-check"></p>
+      <div class="row"><button class="primary" id="save-name" disabled>Use this name</button></div>
+    </section>
+
+    <!-- 2: keys -->
+    <section class="panel step" id="step-keys" hidden>
+      <h2><span class="num">2</span> Generate the deployer</h2>
+      <p class="hint">
+        This server needs a wallet of its own: it deploys the receipt contract and then
+        pays for every subname your users mint, so they never need gas or a token. The
+        key is generated here and written only to <code>.storage/</code>.
+      </p>
+      <div class="row"><button class="primary" id="gen-keys">Generate key</button></div>
+      <p class="status" id="keys-status"></p>
+    </section>
+
+    <!-- 3: fund -->
+    <section class="panel step" id="step-fund" hidden>
+      <h2><span class="num">3</span> Fund it</h2>
+      <p class="hint">Send Sepolia ETH to this address. The page notices when it arrives.</p>
+      <code class="key" id="deployer">…</code>
+      <div class="row">
+        <button class="ghost" id="copy-deployer">Copy address</button>
+        <span class="mono" id="balance">checking…</span>
+      </div>
+      <dl class="facts" style="margin-top:14px">
+        <dt>Deployment costs</dt><dd class="mono" id="cost">—</dd>
+        <dt>Suggested float</dt><dd class="mono" id="suggested">—</dd>
+      </dl>
+      <div class="row"><button class="primary" id="deploy" disabled>Deploy the contract</button></div>
+      <p class="status" id="deploy-status"></p>
+    </section>
+
+    <!-- done -->
+    <section class="panel" id="step-done" hidden>
+      <h2>Ready</h2>
+      <dl class="facts">
+        <dt>Name</dt><dd class="mono" id="d-name">—</dd>
+        <dt>Receipts</dt><dd class="mono" id="d-address">—</dd>
+        <dt>Deploy tx</dt><dd class="mono" id="d-tx">—</dd>
+        <dt>Deployer</dt><dd class="mono" id="d-deployer">—</dd>
+      </dl>
+      <div class="row"><a class="primary" href="/">Go to the app</a></div>
+    </section>
+
+    <p class="foot" id="rpc"></p>
+  </main>
+
+  <script type="module" src="setup.bundle.js"></script>
+</body>
+</html>

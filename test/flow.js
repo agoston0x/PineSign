@@ -39,6 +39,26 @@ const evePriv = generatePrivateKey(), evePub = toHex(publicKeyFrom(evePriv))
 const plaintext = new TextEncoder().encode('The quiet part, written down. ' + Date.now())
 const plaintextHash = toHex(hashPlaintext(plaintext))
 
+console.log('\nnames')
+const aliceName = await post('/api/name/register', { ...(await auth(alicePriv, alicePub)), label: 'alice' + Date.now() % 100000 })
+check('a name can be claimed', aliceName.status === 200 && aliceName.body.name.endsWith('.pinesign.eth'))
+const bobName = await post('/api/name/register', { ...(await auth(bobPriv, bobPub)), label: 'bob' + Date.now() % 100000 })
+check('a second name can be claimed', bobName.status === 200)
+
+const taken = await post('/api/name/register', { ...(await auth(evePriv, evePub)), label: aliceName.body.label })
+check('a taken name is refused', taken.status === 400)
+
+const resolved = await (await fetch(`${BASE}/api/name/resolve/${aliceName.body.name}`)).json()
+check('a name resolves to the key', resolved.pubKey === alicePub)
+
+console.log('\ngating')
+const unnamed = await post('/api/send', {
+  ...(await auth(evePriv, evePub)),
+  recipientPubKey: bobPub, plaintextHash: '00'.repeat(32),
+  senderSignature: '00'.repeat(64), ciphertext: 'AAAA',
+})
+check('an unnamed sender cannot send', unnamed.status === 403)
+
 console.log('\nsend')
 const sharedAlice = deriveSharedKey(alicePriv, fromHex(bobPub))
 const ciphertext = encrypt(plaintext, sharedAlice)
@@ -72,6 +92,7 @@ check('a nonce cannot be replayed', replay.status === 401)
 console.log('\nreceive')
 const record = await (await fetch(`${BASE}/api/transfer/${id}`)).json()
 check('record names the recipient', record.recipientPubKey === bobPub)
+check('record carries both names', record.senderName === aliceName.body.name && record.recipientName === bobName.body.name)
 check('record carries no plaintext', !JSON.stringify(record).includes('quiet part'))
 
 const blob = new Uint8Array(await (await fetch(`${BASE}/api/blob/${id}`)).arrayBuffer())

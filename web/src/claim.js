@@ -1,22 +1,13 @@
 /**
  * Claim page.
  *
- * Everything that matters happens on this device: the file is fetched as
- * ciphertext, decrypted with a key derived locally, and checked against the
- * hash the sender committed to before the transfer existed.
+ * This page holds no key and can read no file. It fetches ciphertext, hands it
+ * to the extension, and gets back a plaintext and a signature — the private key
+ * never enters the page, so nothing here could leak it.
  */
 
-import {
-  deriveSharedKey,
-  decrypt,
-  hashPlaintext,
-  transferDigest,
-  sign,
-  toHex,
-  fromHex,
-} from '../../shared/crypto.js'
-import { getOrCreateIdentity } from '../../shared/identity.js'
 import { Gateway } from '../../shared/client.js'
+import { extensionPresent, getIdentity, openTransfer, bridgeSigner } from '../../shared/bridge.js'
 
 const el = (id) => document.getElementById(id)
 const gateway = new Gateway(location.origin)
@@ -41,9 +32,7 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function short(hex) {
-  return `${hex.slice(0, 10)}…${hex.slice(-6)}`
-}
+const short = (hex) => `${hex.slice(0, 10)}…${hex.slice(-6)}`
 
 function showReceipt(claim) {
   el('r-time').textContent = new Date(claim.claimedAt).toLocaleString()
@@ -56,8 +45,14 @@ function showReceipt(claim) {
 async function load() {
   if (!id) return subtitle('No transfer in this link.', '#ff9c7a')
 
-  identity = await getOrCreateIdentity()
-  el('pubkey').textContent = identity.publicKeyHex
+  if (!(await extensionPresent())) {
+    el('install-panel').hidden = false
+    return subtitle('Install the PineSign extension to open this file.', '#ff9c7a')
+  }
+
+  identity = await getIdentity()
+  const named = await gateway.reverseName(identity.publicKey)
+  el('pubkey').textContent = named ? named.name : identity.publicKey
   el('identity-panel').hidden = false
 
   try {
@@ -68,7 +63,7 @@ async function load() {
 
   el('f-name').textContent = transfer.filename
   el('f-size').textContent = formatSize(transfer.size)
-  el('f-sender').textContent = short(transfer.senderPubKey)
+  el('f-sender').textContent = transfer.senderName ?? short(transfer.senderPubKey)
   el('f-ref').textContent = short(transfer.reference)
   el('f-expires').textContent = new Date(transfer.expiresAt).toLocaleString()
   el('details').hidden = false
@@ -78,9 +73,9 @@ async function load() {
   }
 
   // The recipient is named in the transfer itself, so a link alone opens nothing.
-  if (transfer.recipientPubKey !== identity.publicKeyHex) {
+  if (transfer.recipientPubKey !== identity.publicKey) {
     el('identity-hint').textContent =
-      'This file was sent to a different key. Give the sender the key above and ask them to send it again.'
+      'This file was sent to a different key. Give the sender the name above and ask them to send it again.'
     return subtitle('Not addressed to this device.', '#ff9c7a')
   }
 
@@ -88,8 +83,7 @@ async function load() {
 
   if (transfer.claim) {
     subtitle('Already delivered.', 'var(--glow)')
-    showReceipt(transfer.claim)
-    return
+    return showReceipt(transfer.claim)
   }
 
   subtitle('Waiting for you to accept.')
@@ -101,30 +95,20 @@ el('accept').addEventListener('click', async () => {
     say('Fetching the encrypted file…')
     const blob = await gateway.blob(id)
 
-    // Same ECDH the sender ran, from the other side: our private key and their
-    // public one produce the identical secret.
-    say('Deriving the key…')
-    const sharedKey = deriveSharedKey(identity.privateKey, fromHex(transfer.senderPubKey))
-
-    say('Decrypting…')
-    const plaintext = decrypt(blob, sharedKey)
-
-    // What arrived must be what was committed to, or this is not the transfer.
-    const hash = toHex(hashPlaintext(plaintext))
-    if (hash !== transfer.plaintextHash) {
-      throw new Error('the decrypted file does not match what the sender committed to')
-    }
-
-    say('Signing the receipt…')
-    const digest = transferDigest({
+    // Decryption and the receipt are one step inside the extension: the page
+    // cannot take the file and then decline to sign for it.
+    say('Opening it in the extension…')
+    const opened = await openTransfer({
+      ciphertext: Array.from(blob),
       senderPubKey: transfer.senderPubKey,
-      recipientPubKey: identity.publicKeyHex,
-      plaintextHash: hash,
+      expectedHash: transfer.plaintextHash,
     })
-    const claimSignature = toHex(sign(digest, identity.privateKey))
-    const { claim } = await gateway.claim(identity, id, claimSignature)
 
-    const url = URL.createObjectURL(new Blob([plaintext]))
+    say('Recording the receipt…')
+    const { claim } = await gateway.claim(await bridgeSigner(), id, opened.signature)
+
+    const bytes = Uint8Array.from(opened.plaintext)
+    const url = URL.createObjectURL(new Blob([bytes]))
     const a = document.createElement('a')
     a.href = url
     a.download = transfer.filename

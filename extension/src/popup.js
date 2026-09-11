@@ -1,9 +1,8 @@
 /**
  * Extension popup.
  *
- * The file is read, encrypted and hashed here, in the extension's own context.
- * What crosses the wire to the gateway is ciphertext plus a hash — the gateway
- * has no way back to the bytes.
+ * The file is read, encrypted and hashed here. What crosses the wire is
+ * ciphertext and a hash — the gateway has no way back to the bytes.
  */
 
 import {
@@ -16,131 +15,192 @@ import {
   fromHex,
 } from '../../shared/crypto.js'
 import { getOrCreateIdentity } from '../../shared/identity.js'
-import { Gateway, toBase64 } from '../../shared/client.js'
+import { Gateway, localSigner, toBase64 } from '../../shared/client.js'
 
 const DEFAULT_GATEWAY = 'http://localhost:8788'
 const GATEWAY_KEY = 'pinesign.gateway'
 
 const el = (id) => document.getElementById(id)
-const ui = {
-  pubkey: el('pubkey'),
-  address: el('address'),
-  copyKey: el('copy-key'),
-  recipient: el('recipient'),
-  file: el('file'),
-  send: el('send'),
-  status: el('status'),
-  result: el('result'),
-  claimLink: el('claim-link'),
-  copyLink: el('copy-link'),
-  gateway: el('gateway'),
-  mode: el('mode'),
-}
 
 let identity = null
+let signer = null
+let myName = null
+let recipient = null
 
-function say(message, kind = '') {
-  ui.status.textContent = message
-  ui.status.className = `status ${kind}`.trim()
+const gateway = () => new Gateway(el('gateway').value.trim())
+
+function setStatus(node, message, kind = '') {
+  node.textContent = message
+  node.className = `status ${kind}`.trim()
 }
+
+const say = (m, k) => setStatus(el('status'), m, k)
+const sayName = (m, k) => setStatus(el('name-status'), m, k)
 
 function readyToSend() {
-  const recipient = ui.recipient.value.trim()
-  ui.send.disabled = !(/^0[23][0-9a-f]{64}$/i.test(recipient) && ui.file.files.length > 0)
+  el('send').disabled = !(recipient && el('file').files.length > 0)
 }
 
-async function storedGateway() {
-  if (globalThis.chrome?.storage?.local) {
-    const out = await chrome.storage.local.get(GATEWAY_KEY)
-    return out[GATEWAY_KEY] ?? DEFAULT_GATEWAY
-  }
-  return localStorage.getItem(GATEWAY_KEY) ?? DEFAULT_GATEWAY
-}
-
-async function saveGateway(url) {
-  if (globalThis.chrome?.storage?.local) return chrome.storage.local.set({ [GATEWAY_KEY]: url })
-  localStorage.setItem(GATEWAY_KEY, url)
+async function stored(key, fallback) {
+  const out = await chrome.storage.local.get(key)
+  return out[key] ?? fallback
 }
 
 async function refreshMode() {
   try {
-    const health = await new Gateway(ui.gateway.value.trim()).health()
-    ui.mode.textContent = health.swarm?.mode === 'swarm' ? 'swarm' : 'local'
-    ui.mode.style.color = health.swarm?.mode === 'swarm' ? 'var(--glow)' : 'var(--haze)'
+    const health = await gateway().health()
+    const live = health.swarm?.mode === 'swarm'
+    el('mode').textContent = live ? 'swarm' : 'local'
+    el('mode').style.color = live ? 'var(--glow)' : 'var(--haze)'
   } catch {
-    ui.mode.textContent = 'offline'
-    ui.mode.style.color = '#ff9c7a'
+    el('mode').textContent = 'offline'
+    el('mode').style.color = '#ff9c7a'
   }
+}
+
+function showName(record) {
+  myName = record
+  el('your-name').textContent = record.name
+  el('claim-name').hidden = true
+  el('have-name').hidden = false
+  el('send-card').hidden = false
 }
 
 async function init() {
   identity = await getOrCreateIdentity()
-  ui.pubkey.textContent = identity.publicKeyHex
-  ui.address.textContent = identity.address.slice(0, 10) + '…'
-  ui.gateway.value = await storedGateway()
+  signer = localSigner(identity)
+  el('gateway').value = await stored(GATEWAY_KEY, DEFAULT_GATEWAY)
+
   refreshMode()
+
+  const existing = await gateway().reverseName(identity.publicKeyHex)
+  if (existing) showName(existing)
 }
 
-ui.copyKey.addEventListener('click', () => {
-  navigator.clipboard.writeText(identity.publicKeyHex)
-  ui.copyKey.textContent = 'Copied'
-  setTimeout(() => (ui.copyKey.textContent = 'Copy key'), 1200)
+// ---- claiming a name ----
+
+el('label').addEventListener('input', () => {
+  const label = el('label').value.trim().toLowerCase()
+  el('register').disabled = !/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label)
 })
 
-ui.recipient.addEventListener('input', readyToSend)
-ui.file.addEventListener('change', readyToSend)
+el('register').addEventListener('click', async () => {
+  el('register').disabled = true
+  sayName('Claiming…')
+  try {
+    showName(await gateway().registerName(signer, el('label').value.trim().toLowerCase()))
+    sayName('')
+  } catch (err) {
+    sayName(err.message, 'error')
+    el('register').disabled = false
+  }
+})
 
-ui.gateway.addEventListener('change', async () => {
-  await saveGateway(ui.gateway.value.trim())
+el('copy-name').addEventListener('click', () => {
+  navigator.clipboard.writeText(myName.name)
+  el('copy-name').textContent = 'Copied'
+  setTimeout(() => (el('copy-name').textContent = 'Copy name'), 1200)
+})
+
+/**
+ * The key is the only thing that can ever decrypt what was sent to it. Losing
+ * it loses every file, so it can be written down — once, deliberately.
+ */
+el('backup').addEventListener('click', () => {
+  const backup = {
+    name: myName?.name ?? null,
+    publicKey: identity.publicKeyHex,
+    privateKey: toHex(identity.privateKey),
+    warning: 'Anyone holding this private key can read every file ever sent to this name.',
+  }
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${myName?.label ?? 'pinesign'}.key.json`
+  a.click()
+  URL.revokeObjectURL(url)
+})
+
+// ---- addressing ----
+
+let resolveTimer = null
+el('recipient').addEventListener('input', () => {
+  recipient = null
+  el('resolved').textContent = ''
+  el('resolved').className = 'resolved'
+  readyToSend()
+
+  const name = el('recipient').value.trim().toLowerCase()
+  if (name.length < 3) return
+
+  clearTimeout(resolveTimer)
+  resolveTimer = setTimeout(async () => {
+    try {
+      const record = await gateway().resolveName(name)
+      if (record.pubKey === identity.publicKeyHex) {
+        el('resolved').textContent = 'That is you.'
+        el('resolved').className = 'resolved error'
+        return
+      }
+      recipient = record
+      el('resolved').textContent = `Found — key ${record.pubKey.slice(0, 10)}…`
+      el('resolved').className = 'resolved ok'
+    } catch {
+      el('resolved').textContent = 'No such name.'
+      el('resolved').className = 'resolved error'
+    }
+    readyToSend()
+  }, 250)
+})
+
+el('file').addEventListener('change', readyToSend)
+
+el('gateway').addEventListener('change', async () => {
+  await chrome.storage.local.set({ [GATEWAY_KEY]: el('gateway').value.trim() })
   refreshMode()
 })
 
-ui.send.addEventListener('click', async () => {
-  const recipientPubKey = ui.recipient.value.trim().toLowerCase()
-  const file = ui.file.files[0]
+// ---- sending ----
 
-  if (recipientPubKey === identity.publicKeyHex) {
-    return say('That is your own key — pick the recipient’s.', 'error')
-  }
-
-  ui.send.disabled = true
-  ui.result.hidden = true
+el('send').addEventListener('click', async () => {
+  el('send').disabled = true
+  el('result').hidden = true
 
   try {
+    const file = el('file').files[0]
     say('Reading file…')
     const plaintext = new Uint8Array(await file.arrayBuffer())
 
     // The key is derived, never transmitted: our private key plus their public
     // key gives the same secret they will compute from the other direction.
     say('Deriving shared key…')
-    const sharedKey = deriveSharedKey(identity.privateKey, fromHex(recipientPubKey))
+    const sharedKey = deriveSharedKey(identity.privateKey, fromHex(recipient.pubKey))
 
     say('Encrypting…')
     const ciphertext = encrypt(plaintext, sharedKey)
     const plaintextHash = toHex(hashPlaintext(plaintext))
 
-    // Committing to the transfer before the recipient has ever seen it: this
+    // Committing to the transfer before the recipient has seen it: this
     // signature is what proves the file came from us.
     const digest = transferDigest({
       senderPubKey: identity.publicKeyHex,
-      recipientPubKey,
+      recipientPubKey: recipient.pubKey,
       plaintextHash,
     })
-    const senderSignature = toHex(sign(digest, identity.privateKey))
 
     say('Uploading to the gateway…')
-    const result = await new Gateway(ui.gateway.value.trim()).send(identity, {
-      recipientPubKey,
+    const result = await gateway().send(signer, {
+      recipientPubKey: recipient.pubKey,
       plaintextHash,
-      senderSignature,
+      senderSignature: toHex(sign(digest, identity.privateKey)),
       filename: file.name,
       ciphertext: toBase64(ciphertext),
     })
 
-    ui.claimLink.textContent = result.claimUrl
-    ui.result.hidden = false
+    el('claim-link').textContent = result.claimUrl
+    el('result').hidden = false
     const days = Math.round((result.expiresAt - Date.now()) / 86400000)
-    say(`Sent. The file and its link disappear in ${days} day${days === 1 ? '' : 's'}.`, 'done')
+    say(`Sent to ${recipient.name}. Gone in ${days} day${days === 1 ? '' : 's'}.`, 'done')
   } catch (err) {
     say(err.message, 'error')
   } finally {
@@ -148,10 +208,10 @@ ui.send.addEventListener('click', async () => {
   }
 })
 
-ui.copyLink.addEventListener('click', () => {
-  navigator.clipboard.writeText(ui.claimLink.textContent)
-  ui.copyLink.textContent = 'Copied'
-  setTimeout(() => (ui.copyLink.textContent = 'Copy link'), 1200)
+el('copy-link').addEventListener('click', () => {
+  navigator.clipboard.writeText(el('claim-link').textContent)
+  el('copy-link').textContent = 'Copied'
+  setTimeout(() => (el('copy-link').textContent = 'Copy link'), 1200)
 })
 
 init()

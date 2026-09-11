@@ -106,3 +106,19 @@ button:not(:disabled):hover { filter: brightness(1.12); }
 .foot label { margin: 0; }
 .foot input { flex: 1; }
 .mode { font-size: 10px; color: var(--haze); white-space: nowrap; }
+
+.row.tight { margin-top: 0; gap: 0; }
+.row.tight input { border-radius: 7px 0 0 7px; border-right: none; }
+.suffix {
+  padding: 7px 9px;
+  font: 11px ui-monospace, Menlo, monospace;
+  color: var(--haze);
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--line);
+  border-radius: 0 7px 7px 0;
+}
+
+.resolved { margin: 5px 0 0; min-height: 14px; font-size: 11px; color: var(--haze); }
+.resolved.ok { color: var(--glow); }
+.resolved.error { color: #ff9c7a; }

@@ -1,22 +1,37 @@
-/** Lander: shows the visitor their own key, so they can be sent a file. */
+/**
+ * Lander.
+ *
+ * Generates nothing. If the extension is installed it shows the visitor the
+ * name they are reachable at; otherwise it tells them what to install.
+ */
 
-import { getOrCreateIdentity, createIdentity } from '../../shared/identity.js'
+import { Gateway } from '../../shared/client.js'
+import { extensionPresent, getIdentity } from '../../shared/bridge.js'
 
-const pubkey = document.getElementById('pubkey')
-const copyKey = document.getElementById('copy-key')
-const newKey = document.getElementById('new-key')
+const el = (id) => document.getElementById(id)
+const gateway = new Gateway(location.origin)
 
-let identity = await getOrCreateIdentity()
-pubkey.textContent = identity.publicKeyHex
+async function show() {
+  if (!(await extensionPresent())) {
+    el('no-extension').hidden = false
+    return
+  }
 
-copyKey.addEventListener('click', () => {
-  navigator.clipboard.writeText(identity.publicKeyHex)
-  copyKey.textContent = 'Copied'
-  setTimeout(() => (copyKey.textContent = 'Copy key'), 1200)
-})
+  const identity = await getIdentity()
+  const named = await gateway.reverseName(identity.publicKey)
 
-newKey.addEventListener('click', async () => {
-  if (!confirm('Replace your key? Anything already sent to the old one becomes unreadable.')) return
-  identity = await createIdentity()
-  pubkey.textContent = identity.publicKeyHex
-})
+  if (named) {
+    el('your-name').textContent = named.name
+    el('named').hidden = false
+  } else {
+    el('unnamed').hidden = false
+  }
+
+  el('copy-name').addEventListener('click', () => {
+    navigator.clipboard.writeText(el('your-name').textContent)
+    el('copy-name').textContent = 'Copied'
+    setTimeout(() => (el('copy-name').textContent = 'Copy name'), 1200)
+  })
+}
+
+show()

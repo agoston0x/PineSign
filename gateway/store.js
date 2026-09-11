@@ -7,7 +7,7 @@
  * write-once rule, same two signatures.
  */
 
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const FILE = path.resolve('.storage/transfers.json')
@@ -26,6 +26,7 @@ async function load() {
 }
 
 async function persist() {
+  await mkdir(path.dirname(FILE), { recursive: true })
   await writeFile(FILE, JSON.stringify(transfers, null, 2))
 }
 

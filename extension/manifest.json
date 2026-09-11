@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PineSign",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Encrypt a file on your machine and send it verifiably. Nothing readable ever leaves your computer.",
   "action": {
     "default_popup": "popup.html",
@@ -16,6 +16,17 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "background": {
+    "service_worker": "lib/background.bundle.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://localhost:*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
   "permissions": ["storage"],
-  "host_permissions": ["http://localhost:8788/*", "https://*/*"]
+  "host_permissions": ["http://localhost/*", "http://localhost:*/*", "https://*/*"]
 }

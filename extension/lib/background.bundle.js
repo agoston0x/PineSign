@@ -3152,6 +3152,11 @@ function encrypt2(plaintext, sharedKey) {
   out.set(sealed, nonce.length);
   return out;
 }
+function decrypt(blob, sharedKey) {
+  const nonce = blob.slice(0, 12);
+  const sealed = blob.slice(12);
+  return gcm(sharedKey, nonce).decrypt(sealed);
+}
 function transferDigest({ senderPubKey, recipientPubKey, plaintextHash }) {
   const parts = [
     INFO,
@@ -3215,8 +3220,8 @@ function hydrate(privateKeyHex) {
   };
 }
 async function loadIdentity() {
-  const stored2 = await store.get();
-  return stored2 ? hydrate(stored2) : null;
+  const stored = await store.get();
+  return stored ? hydrate(stored) : null;
 }
 async function createIdentity() {
   const privateKeyHex = toHex(generatePrivateKey());
@@ -3227,243 +3232,73 @@ async function getOrCreateIdentity() {
   return await loadIdentity() ?? await createIdentity();
 }
 
-// shared/client.js
-function localSigner(identity2) {
-  return {
-    publicKeyHex: identity2.publicKeyHex,
-    address: identity2.address,
-    async signDigest(digest) {
-      return toHex(sign(digest, identity2.privateKey));
+// extension/src/background.js
+var handlers = {
+  /** Who am I? Public half only. */
+  async identity() {
+    const id = await getOrCreateIdentity();
+    return { publicKey: id.publicKeyHex, address: id.address };
+  },
+  /**
+   * Decrypt a transfer and sign its receipt, in one step.
+   *
+   * Deliberately one call: handing a page the plaintext and then trusting it to
+   * come back for the signature would let it take the file and skip the receipt.
+   * Here, decrypting and attesting are the same operation.
+   */
+  async openTransfer({ ciphertext, senderPubKey, expectedHash }) {
+    const id = await getOrCreateIdentity();
+    const sharedKey = deriveSharedKey(id.privateKey, fromHex(senderPubKey));
+    const plaintext = decrypt(Uint8Array.from(ciphertext), sharedKey);
+    const hash = toHex(hashPlaintext(plaintext));
+    if (expectedHash && hash !== expectedHash) {
+      throw new Error("the decrypted file does not match what the sender committed to");
     }
-  };
-}
-var Gateway = class {
-  constructor(baseUrl) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
-  }
-  async #json(path, options) {
-    const res = await fetch(this.baseUrl + path, options);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-    return body;
-  }
-  #post(path, body) {
-    return this.#json(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-  }
-  /** A fresh nonce, signed — the gateway's proof of who is asking. */
-  async #auth(signer2) {
-    const pubKey = signer2.publicKeyHex;
-    const { nonce } = await this.#post("/api/nonce", { pubKey });
-    const signature = await signer2.signDigest(sha2562(new TextEncoder().encode(nonce)));
-    return { pubKey, nonce, signature };
-  }
-  health() {
-    return this.#json("/api/health");
-  }
-  async send(signer2, payload) {
-    return this.#post("/api/send", { ...await this.#auth(signer2), ...payload });
-  }
-  transfer(id) {
-    return this.#json(`/api/transfer/${id}`);
-  }
-  async blob(id) {
-    const res = await fetch(`${this.baseUrl}/api/blob/${id}`);
-    if (!res.ok) throw new Error(`blob fetch failed: ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
-  }
-  async claim(signer2, id, claimSignature) {
-    return this.#post("/api/claim", { ...await this.#auth(signer2), id, claimSignature });
-  }
-  // ---- names ----
-  /** Claim a name and publish an encryption key under it. */
-  async registerName(signer2, label) {
-    return this.#post("/api/name/register", {
-      ...await this.#auth(signer2),
-      label,
-      address: signer2.address ?? null
-    });
-  }
-  /** Name to key — how a sender finds out where to encrypt. */
-  resolveName(name) {
-    return this.#json(`/api/name/resolve/${encodeURIComponent(name)}`);
-  }
-  /** Key to name, for showing a person rather than a hex string. */
-  async reverseName(pubKey) {
-    try {
-      return await this.#json(`/api/name/reverse/${pubKey}`);
-    } catch {
-      return null;
-    }
-  }
-};
-function toBase64(bytes) {
-  let binary = "";
-  const chunk = 32768;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-// extension/src/popup.js
-var DEFAULT_GATEWAY = "http://localhost:8788";
-var GATEWAY_KEY = "pinesign.gateway";
-var el = (id) => document.getElementById(id);
-var identity = null;
-var signer = null;
-var myName = null;
-var recipient = null;
-var gateway = () => new Gateway(el("gateway").value.trim());
-function setStatus(node, message, kind = "") {
-  node.textContent = message;
-  node.className = `status ${kind}`.trim();
-}
-var say = (m, k) => setStatus(el("status"), m, k);
-var sayName = (m, k) => setStatus(el("name-status"), m, k);
-function readyToSend() {
-  el("send").disabled = !(recipient && el("file").files.length > 0);
-}
-async function stored(key, fallback) {
-  const out = await chrome.storage.local.get(key);
-  return out[key] ?? fallback;
-}
-async function refreshMode() {
-  try {
-    const health = await gateway().health();
-    const live = health.swarm?.mode === "swarm";
-    el("mode").textContent = live ? "swarm" : "local";
-    el("mode").style.color = live ? "var(--glow)" : "var(--haze)";
-  } catch {
-    el("mode").textContent = "offline";
-    el("mode").style.color = "#ff9c7a";
-  }
-}
-function showName(record) {
-  myName = record;
-  el("your-name").textContent = record.name;
-  el("claim-name").hidden = true;
-  el("have-name").hidden = false;
-  el("send-card").hidden = false;
-}
-async function init() {
-  identity = await getOrCreateIdentity();
-  signer = localSigner(identity);
-  el("gateway").value = await stored(GATEWAY_KEY, DEFAULT_GATEWAY);
-  refreshMode();
-  const existing = await gateway().reverseName(identity.publicKeyHex);
-  if (existing) showName(existing);
-}
-el("label").addEventListener("input", () => {
-  const label = el("label").value.trim().toLowerCase();
-  el("register").disabled = !/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label);
-});
-el("register").addEventListener("click", async () => {
-  el("register").disabled = true;
-  sayName("Claiming\u2026");
-  try {
-    showName(await gateway().registerName(signer, el("label").value.trim().toLowerCase()));
-    sayName("");
-  } catch (err) {
-    sayName(err.message, "error");
-    el("register").disabled = false;
-  }
-});
-el("copy-name").addEventListener("click", () => {
-  navigator.clipboard.writeText(myName.name);
-  el("copy-name").textContent = "Copied";
-  setTimeout(() => el("copy-name").textContent = "Copy name", 1200);
-});
-el("backup").addEventListener("click", () => {
-  const backup = {
-    name: myName?.name ?? null,
-    publicKey: identity.publicKeyHex,
-    privateKey: toHex(identity.privateKey),
-    warning: "Anyone holding this private key can read every file ever sent to this name."
-  };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${myName?.label ?? "pinesign"}.key.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-var resolveTimer = null;
-el("recipient").addEventListener("input", () => {
-  recipient = null;
-  el("resolved").textContent = "";
-  el("resolved").className = "resolved";
-  readyToSend();
-  const name = el("recipient").value.trim().toLowerCase();
-  if (name.length < 3) return;
-  clearTimeout(resolveTimer);
-  resolveTimer = setTimeout(async () => {
-    try {
-      const record = await gateway().resolveName(name);
-      if (record.pubKey === identity.publicKeyHex) {
-        el("resolved").textContent = "That is you.";
-        el("resolved").className = "resolved error";
-        return;
-      }
-      recipient = record;
-      el("resolved").textContent = `Found \u2014 key ${record.pubKey.slice(0, 10)}\u2026`;
-      el("resolved").className = "resolved ok";
-    } catch {
-      el("resolved").textContent = "No such name.";
-      el("resolved").className = "resolved error";
-    }
-    readyToSend();
-  }, 250);
-});
-el("file").addEventListener("change", readyToSend);
-el("gateway").addEventListener("change", async () => {
-  await chrome.storage.local.set({ [GATEWAY_KEY]: el("gateway").value.trim() });
-  refreshMode();
-});
-el("send").addEventListener("click", async () => {
-  el("send").disabled = true;
-  el("result").hidden = true;
-  try {
-    const file = el("file").files[0];
-    say("Reading file\u2026");
-    const plaintext = new Uint8Array(await file.arrayBuffer());
-    say("Deriving shared key\u2026");
-    const sharedKey = deriveSharedKey(identity.privateKey, fromHex(recipient.pubKey));
-    say("Encrypting\u2026");
-    const ciphertext = encrypt2(plaintext, sharedKey);
-    const plaintextHash = toHex(hashPlaintext(plaintext));
     const digest = transferDigest({
-      senderPubKey: identity.publicKeyHex,
-      recipientPubKey: recipient.pubKey,
+      senderPubKey,
+      recipientPubKey: id.publicKeyHex,
+      plaintextHash: hash
+    });
+    return {
+      plaintext: Array.from(plaintext),
+      plaintextHash: hash,
+      signature: toHex(sign(digest, id.privateKey))
+    };
+  },
+  /** Encrypt for a recipient, and commit to the transfer. */
+  async sealTransfer({ plaintext, recipientPubKey }) {
+    const id = await getOrCreateIdentity();
+    const bytes = Uint8Array.from(plaintext);
+    const sharedKey = deriveSharedKey(id.privateKey, fromHex(recipientPubKey));
+    const ciphertext = encrypt2(bytes, sharedKey);
+    const plaintextHash = toHex(hashPlaintext(bytes));
+    const digest = transferDigest({
+      senderPubKey: id.publicKeyHex,
+      recipientPubKey,
       plaintextHash
     });
-    say("Uploading to the gateway\u2026");
-    const result = await gateway().send(signer, {
-      recipientPubKey: recipient.pubKey,
+    return {
+      ciphertext: Array.from(ciphertext),
       plaintextHash,
-      senderSignature: toHex(sign(digest, identity.privateKey)),
-      filename: file.name,
-      ciphertext: toBase64(ciphertext)
-    });
-    el("claim-link").textContent = result.claimUrl;
-    el("result").hidden = false;
-    const days = Math.round((result.expiresAt - Date.now()) / 864e5);
-    say(`Sent to ${recipient.name}. Gone in ${days} day${days === 1 ? "" : "s"}.`, "done");
-  } catch (err) {
-    say(err.message, "error");
-  } finally {
-    readyToSend();
+      senderSignature: toHex(sign(digest, id.privateKey)),
+      senderPubKey: id.publicKeyHex
+    };
+  },
+  /** Sign an arbitrary digest — used for gateway nonces. */
+  async signDigest({ digest }) {
+    const id = await getOrCreateIdentity();
+    return { signature: toHex(sign(fromHex(digest), id.privateKey)) };
   }
+};
+chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+  const handler = handlers[message?.type];
+  if (!handler) {
+    respond({ ok: false, error: `unknown request: ${message?.type}` });
+    return false;
+  }
+  handler(message.payload ?? {}).then((result) => respond({ ok: true, result })).catch((err) => respond({ ok: false, error: err.message }));
+  return true;
 });
-el("copy-link").addEventListener("click", () => {
-  navigator.clipboard.writeText(el("claim-link").textContent);
-  el("copy-link").textContent = "Copied";
-  setTimeout(() => el("copy-link").textContent = "Copy link", 1200);
-});
-init();
 /*! Bundled license information:
 
 @noble/hashes/esm/utils.js:

@@ -14,20 +14,33 @@
     </div>
   </header>
 
-  <section class="card" id="identity-card">
-    <h2>Your key</h2>
-    <p class="hint">Share this with anyone who wants to send you a file.</p>
-    <code class="key" id="pubkey">…</code>
-    <div class="row">
-      <button class="ghost" id="copy-key">Copy key</button>
-      <span class="addr" id="address"></span>
+  <section class="card">
+    <h2>You</h2>
+
+    <div id="claim-name">
+      <p class="hint">Claim a name. It publishes your key, so people can send to you.</p>
+      <div class="row tight">
+        <input id="label" type="text" placeholder="alice" spellcheck="false" />
+        <span class="suffix" id="suffix">.pinesign.eth</span>
+      </div>
+      <button class="primary" id="register" disabled>Claim it</button>
+      <p class="status" id="name-status"></p>
+    </div>
+
+    <div id="have-name" hidden>
+      <code class="key" id="your-name">…</code>
+      <div class="row">
+        <button class="ghost" id="copy-name">Copy name</button>
+        <button class="ghost" id="backup">Back up key</button>
+      </div>
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="send-card" hidden>
     <h2>Send a file</h2>
-    <label for="recipient">Recipient's key</label>
-    <input id="recipient" type="text" placeholder="03a1b2c3… (66 hex characters)" spellcheck="false" />
+    <label for="recipient">To</label>
+    <input id="recipient" type="text" placeholder="bob.pinesign.eth" spellcheck="false" />
+    <p class="resolved" id="resolved"></p>
 
     <label for="file">File</label>
     <input id="file" type="file" />
@@ -36,7 +49,7 @@
     <p class="status" id="status"></p>
 
     <div class="result" id="result" hidden>
-      <p class="hint">Send this link to the recipient. It expires with the file.</p>
+      <p class="hint">Send this link to them. It expires with the file.</p>
       <code class="link" id="claim-link"></code>
       <button class="ghost" id="copy-link">Copy link</button>
     </div>

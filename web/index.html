@@ -49,12 +49,29 @@
     </section>
 
     <section class="panel">
-      <h2>Your key</h2>
-      <p class="hint">Give this to anyone who wants to send you a file. It is generated in your browser and never leaves it.</p>
-      <code class="key" id="pubkey">…</code>
-      <div class="row">
-        <button class="ghost" id="copy-key">Copy key</button>
-        <button class="ghost" id="new-key">Generate a new one</button>
+      <h2>Your name</h2>
+
+      <div id="no-extension" hidden>
+        <p class="hint">
+          PineSign needs its extension: your key is generated there, and it is the only
+          place that can decrypt what is sent to you. This page never sees it.
+        </p>
+        <p class="hint mono">Load <code>extension/</code> unpacked at chrome://extensions</p>
+      </div>
+
+      <div id="named" hidden>
+        <p class="hint">This is how people address files to you.</p>
+        <code class="key" id="your-name">…</code>
+        <div class="row">
+          <button class="ghost" id="copy-name">Copy name</button>
+        </div>
+      </div>
+
+      <div id="unnamed" hidden>
+        <p class="hint">
+          You have a key but no name yet. Open the extension and claim one — until you
+          do, nobody can address a file to you and you cannot send.
+        </p>
       </div>
     </section>
 
