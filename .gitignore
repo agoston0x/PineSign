@@ -11,3 +11,6 @@ IMG_*.jpg
 contracts/out/
 contracts/cache/
 contracts/lib/
+
+# Working notes, not for the repo
+scope.md
