@@ -1,0 +1,165 @@
+/**
+ * ENSv2 registration.
+ *
+ * The legacy Sepolia stack no longer registers names — its controllers are not
+ * authorised on the old registrar, and nothing has been registered through it
+ * for days. ENSv2 replaces it, and differs in ways that matter here:
+ *
+ *   - names are priced in an ERC-20, not in ether. On this testnet that token
+ *     is a mock USDC anyone can mint, so a name costs only gas.
+ *   - registration takes a subregistry and a resolver, and returns a token id.
+ *   - the flow is still commit, wait, reveal.
+ *
+ * The ABI is the verified one, read from the deployed contract rather than
+ * transcribed.
+ */
+
+import { createWalletClient, http, formatUnits, parseAbi } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { sepolia } from 'viem/chains'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { publicClient, RPC_URL } from './chain.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+export const REGISTRAR = process.env.ENS_V2_REGISTRAR ?? '0xa88553f454b77203b0d036a05c894d555eaaa2cc'
+export const PAYMENT_TOKEN = process.env.ENS_V2_PAYMENT_TOKEN ?? '0x768f42455a2d082e23ceef7d51e5787c82d67a39'
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+const ZERO_BYTES32 = `0x${'00'.repeat(32)}`
+
+/** Mock USDC: an ordinary ERC-20 whose mint is deliberately left open. */
+const TOKEN_ABI = parseAbi([
+  'function mint(address to, uint256 amount)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+])
+
+let abiCache = null
+async function registrarAbi() {
+  abiCache ??= JSON.parse(await readFile(path.join(__dirname, 'abi', 'ens-v2-registrar.json'), 'utf8'))
+  return abiCache
+}
+
+async function read(functionName, args = []) {
+  return publicClient.readContract({ address: REGISTRAR, abi: await registrarAbi(), functionName, args })
+}
+
+export async function isAvailable(label) {
+  return read('isAvailable', [label])
+}
+
+/** Price in the payment token, for a duration in seconds. */
+export async function registerPrice(label, duration) {
+  const [base, premium] = await read('getRegisterPrice', [label, BigInt(duration), PAYMENT_TOKEN])
+  const total = base + premium
+  return { wei: total.toString(), formatted: formatUnits(total, 6), symbol: 'USDC' }
+}
+
+export async function limits() {
+  const [minAge, maxAge, minDuration] = await Promise.all([
+    read('MIN_COMMITMENT_AGE'),
+    read('MAX_COMMITMENT_AGE'),
+    read('MIN_REGISTER_DURATION'),
+  ])
+  return { minAge: Number(minAge), maxAge: Number(maxAge), minDuration: Number(minDuration) }
+}
+
+/** Is this registrar reachable and behaving? Reported before anything is spent. */
+export async function health() {
+  try {
+    const registry = await read('ETH_REGISTRY')
+    return { available: true, registrar: REGISTRAR, registry, reason: null }
+  } catch (err) {
+    return { available: false, registrar: REGISTRAR, reason: `ENSv2 registrar unreachable: ${err.message}` }
+  }
+}
+
+/**
+ * Register a name.
+ *
+ * Long-running by nature: two transactions with the registrar's minimum
+ * commitment age between them, plus a mint and an approval the first time.
+ */
+export async function register(privateKey, label, { years = 1, onStep } = {}) {
+  const abi = await registrarAbi()
+  const account = privateKeyToAccount(privateKey)
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(RPC_URL) })
+
+  const { minAge, minDuration } = await limits()
+  const duration = BigInt(Math.max(years * 31536000, minDuration))
+
+  if (!(await isAvailable(label))) throw new Error(`${label}.eth is not available`)
+
+  const price = await registerPrice(label, duration)
+  const needed = BigInt(price.wei)
+
+  // The fee is an ERC-20. On this testnet it can simply be minted, so a name
+  // costs gas and nothing else — but the balance and allowance still have to
+  // be there before the registrar will take it.
+  const balance = await publicClient.readContract({
+    address: PAYMENT_TOKEN, abi: TOKEN_ABI, functionName: 'balanceOf', args: [account.address],
+  })
+  if (balance < needed) {
+    onStep?.('Minting the registration fee…')
+    const mintHash = await wallet.writeContract({
+      address: PAYMENT_TOKEN, abi: TOKEN_ABI, functionName: 'mint',
+      args: [account.address, needed * 10n], // enough for renewals too
+    })
+    await publicClient.waitForTransactionReceipt({ hash: mintHash })
+  }
+
+  const allowance = await publicClient.readContract({
+    address: PAYMENT_TOKEN, abi: TOKEN_ABI, functionName: 'allowance', args: [account.address, REGISTRAR],
+  })
+  if (allowance < needed) {
+    onStep?.('Approving the registrar…')
+    const approveHash = await wallet.writeContract({
+      address: PAYMENT_TOKEN, abi: TOKEN_ABI, functionName: 'approve', args: [REGISTRAR, needed * 100n],
+    })
+    await publicClient.waitForTransactionReceipt({ hash: approveHash })
+  }
+
+  const secret = `0x${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')}`
+  const commitArgs = [label, account.address, secret, ZERO_ADDRESS, ZERO_ADDRESS, duration, ZERO_BYTES32]
+
+  onStep?.('Committing…')
+  const commitment = await read('makeCommitment', commitArgs)
+  const commitHash = await wallet.writeContract({
+    address: REGISTRAR, abi, functionName: 'commit', args: [commitment],
+  })
+  await publicClient.waitForTransactionReceipt({ hash: commitHash })
+
+  // A reveal that arrives too early is rejected; a little margin costs nothing.
+  onStep?.(`Waiting ${minAge + 5} seconds, as the registrar requires…`)
+  await new Promise((r) => setTimeout(r, (minAge + 5) * 1000))
+
+  const registerArgs = [
+    label, account.address, secret, ZERO_ADDRESS, ZERO_ADDRESS, duration, PAYMENT_TOKEN, ZERO_BYTES32,
+  ]
+
+  // Simulating first means a failure costs nothing and explains itself.
+  onStep?.('Registering…')
+  await publicClient.simulateContract({
+    address: REGISTRAR, abi, functionName: 'register', args: registerArgs, account: account.address,
+  })
+
+  const registerHash = await wallet.writeContract({
+    address: REGISTRAR, abi, functionName: 'register', args: registerArgs,
+  })
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: registerHash })
+  if (receipt.status !== 'success') throw new Error('the registration transaction reverted')
+
+  return {
+    name: `${label}.eth`,
+    owner: account.address,
+    commitTx: commitHash,
+    registerTx: registerHash,
+    paid: `${price.formatted} ${price.symbol}`,
+  }
+}

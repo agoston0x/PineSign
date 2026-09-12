@@ -35,7 +35,6 @@ function setStatus(node, message, kind = '') {
 }
 
 const say = (m, k) => setStatus(el('status'), m, k)
-const sayName = (m, k) => setStatus(el('name-status'), m, k)
 
 function readyToSend() {
   el('send').disabled = !(recipient && el('file').files.length > 0)
@@ -61,7 +60,7 @@ async function refreshMode() {
 function showName(record) {
   myName = record
   el('your-name').textContent = record.name
-  el('claim-name').hidden = true
+  el('no-name').hidden = true
   el('have-name').hidden = false
   el('send-card').hidden = false
 }
@@ -73,28 +72,17 @@ async function init() {
 
   refreshMode()
 
+  // The app is where an identity is claimed; this popup only ever reports the
+  // result and holds the key behind it.
+  el('open-app').href = el('gateway').value.trim()
+
   const existing = await gateway().reverseName(identity.publicKeyHex)
-  if (existing) showName(existing)
-}
-
-// ---- claiming a name ----
-
-el('label').addEventListener('input', () => {
-  const label = el('label').value.trim().toLowerCase()
-  el('register').disabled = !/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label)
-})
-
-el('register').addEventListener('click', async () => {
-  el('register').disabled = true
-  sayName('Claiming…')
-  try {
-    showName(await gateway().registerName(signer, el('label').value.trim().toLowerCase()))
-    sayName('')
-  } catch (err) {
-    sayName(err.message, 'error')
-    el('register').disabled = false
+  if (existing) {
+    showName(existing)
+  } else {
+    setStatus(el('name-status'), 'No name yet — claim one in the app, then reopen this.')
   }
-})
+}
 
 el('copy-name').addEventListener('click', () => {
   navigator.clipboard.writeText(myName.name)

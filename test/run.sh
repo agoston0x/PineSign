@@ -5,9 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 PORT=${PORT:-8799}
-rm -rf .storage
+rm -rf .storage-test
 
-PINESIGN_SKIP_ENV_FILE=1 PORT="$PORT" node gateway/server.js > /tmp/pinesign-test.log 2>&1 &
+PINESIGN_SKIP_ENV_FILE=1 PINESIGN_STORAGE_DIR=.storage-test PORT="$PORT" node gateway/server.js > /tmp/pinesign-test.log 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT
 

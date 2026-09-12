@@ -7,72 +7,139 @@
   <link rel="icon" href="assets/favicon.png" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <main class="page"><div class="inner">
-    <div class="hero">
-      <img src="assets/pine.png" alt="" />
-      <div>
-        <h1>Set up this server</h1>
-        <p class="tagline" id="subtitle">Checking…</p>
+<body class="admin">
+
+<header class="admin-bar">
+  <a class="brand" href="/"><img src="assets/pine.png" alt="" /><span>PineSign</span></a>
+  <div class="bar-right">
+    <div class="wallet-chip" id="bar-wallet" hidden>
+      <div class="wc-label">Server wallet <span class="wc-net">Sepolia</span></div>
+      <div class="wc-row">
+        <code id="bar-address">—</code>
+        <button class="mini" id="bar-copy" title="Copy address">copy</button>
       </div>
+      <div class="wc-balance" id="bar-balance">—</div>
     </div>
 
-    <section class="panel" id="locked" hidden>
-      <h2>Setup token required</h2>
-      <p class="hint">
-        The server printed a setup link to its console when it started. Open that link,
-        or paste the token here.
+    <div class="wallet-chip" id="bar-node" hidden>
+      <div class="wc-label">Storage node <span class="wc-net gnosis">Gnosis</span></div>
+      <div class="wc-row">
+        <code id="bar-node-address">—</code>
+        <button class="mini" id="bar-node-copy" title="Copy address">copy</button>
+      </div>
+      <div class="wc-balance" id="bar-node-balance">—</div>
+    </div>
+    <div class="admin-chip" id="bar-admin" hidden>
+      <span class="dot"></span>
+      <code id="bar-admin-address">—</code>
+      <button class="mini" id="bar-signout">sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="admin-main">
+  <div class="admin-inner">
+
+    <div class="admin-head">
+      <h1>Set up this server</h1>
+      <p class="admin-sub" id="subtitle">Checking…</p>
+      <ol class="progress" id="progress">
+        <li data-step="name"><span>1</span>Name</li>
+        <li data-step="keys"><span>2</span>Wallet</li>
+        <li data-step="fund"><span>3</span>Fund</li>
+        <li data-step="swarm"><span>4</span>Storage</li>
+      </ol>
+    </div>
+
+    <!-- sign in -->
+    <section class="card" id="locked" hidden>
+      <h2 id="lock-title">Sign in as administrator</h2>
+
+      <p class="hint" id="lock-hint">
+        Connect the wallet that administers this server and sign a message. Nothing is
+        spent — the signature only proves the wallet is yours.
       </p>
-      <label for="token">Token</label>
-      <input id="token" type="text" placeholder="the token from your server console" spellcheck="false" />
-      <div class="row"><button class="primary" id="unlock">Unlock</button></div>
+
+      <div class="row"><button class="primary" id="wallet-signin">Sign in with wallet</button></div>
+
+      <div id="claim-block" hidden>
+        <h3>First run</h3>
+        <p class="hint">
+          Nobody administers this server yet. Paste the token from the server console once,
+          to claim it for your wallet — after this you will only need the wallet.
+        </p>
+        <label for="token">Console token</label>
+        <input id="token" type="text" placeholder="printed when the server started" spellcheck="false" />
+      </div>
+
+      <details class="fallback">
+        <summary>Lost the wallet?</summary>
+        <p class="hint">Sign in with the console token instead.</p>
+        <label for="token-only">Console token</label>
+        <input id="token-only" type="text" spellcheck="false" />
+        <div class="row"><button class="ghost" id="unlock">Use token</button></div>
+      </details>
+
       <p class="status" id="lock-status"></p>
     </section>
 
-    <!-- 1: name -->
-    <section class="panel step" id="step-name" hidden>
-      <h2><span class="num">1</span> Choose a name</h2>
+    <!-- 1 · name -->
+    <section class="card" id="step-name" hidden>
+      <h2>Choose a name</h2>
       <p class="hint">
-        Every user of this server gets a subname under it — <code>alice.yourname.eth</code>
-        — and their encryption key is published in its records. Pick a name you own or
-        can register on Sepolia.
+        Every user of this server gets a subname under it — <code>alice.yourname.eth</code> —
+        and their encryption key is published in its records.
       </p>
       <label for="name">Parent name</label>
-      <input id="name" type="text" placeholder="pinesign.eth" spellcheck="false" />
-      <p class="resolved" id="name-check"></p>
+      <div class="field-row">
+        <input id="name" type="text" placeholder="pinesign" spellcheck="false" autocomplete="off" />
+        <span class="suffix">.eth</span>
+      </div>
+      <p class="availability" id="name-check"></p>
+      <p class="hint" style="margin-top:8px">
+        Checked on <strong>both Sepolia and mainnet</strong> — a name owned on mainnet is
+        one you could never carry past the testnet, so it is not offered.
+      </p>
       <div class="row"><button class="primary" id="save-name" disabled>Use this name</button></div>
     </section>
 
-    <!-- 2: keys -->
-    <section class="panel step" id="step-keys" hidden>
-      <h2><span class="num">2</span> Generate the deployer</h2>
+    <!-- 2 · wallet -->
+    <section class="card" id="step-keys" hidden>
+      <h2>Generate the server wallet</h2>
       <p class="hint">
-        This server needs a wallet of its own: it deploys the receipt contract and then
-        pays for every subname your users mint, so they never need gas or a token. The
-        key is generated here and written only to <code>.storage/</code>.
+        This server needs a wallet of its own. It registers the name, deploys the receipt
+        contract, and then pays for every subname your users mint — so they never need gas
+        or a token. The key is generated here and written only to <code>.storage/</code>,
+        never to the repository.
       </p>
-      <div class="row"><button class="primary" id="gen-keys">Generate key</button></div>
+      <div class="row"><button class="primary" id="gen-keys">Generate wallet</button></div>
       <p class="status" id="keys-status"></p>
     </section>
 
-    <!-- 3: fund -->
-    <section class="panel step" id="step-fund" hidden>
-      <h2><span class="num">3</span> Fund the server</h2>
-      <p class="hint">
-        This wallet pays for everything your users do not: the name, the contract, and
-        every subname and receipt after that. Send it Sepolia ETH — the page notices when
-        it arrives.
-      </p>
-      <code class="key" id="deployer">…</code>
-      <div class="row">
-        <button class="ghost" id="copy-deployer">Copy address</button>
-        <span class="mono" id="balance">checking…</span>
+    <!-- 3 · fund -->
+    <section class="card" id="step-fund" hidden>
+      <h2>Fund the server wallet</h2>
+
+      <div class="tip" id="fund-tip">
+        <strong>You need Sepolia ETH.</strong>
+        Nothing below can happen without it. Pay from your own wallet with a package
+        below, or send to the address in the top right by hand — faucets:
+        <code>sepoliafaucet.com</code>, <code>faucet.quicknode.com/ethereum/sepolia</code>.
       </div>
 
-      <h3 style="margin-top:22px">What it will cost</h3>
+      <h3>Fund from your wallet</h3>
+      <p class="hint" id="pay-hint">
+        Pick what this server should be able to do. Each package covers setup plus a
+        number of users and transfers, with margin for gas moving.
+      </p>
+      <div class="packages" id="packages"></div>
+      <p class="status" id="pay-status"></p>
+
+      <h3>What it will cost</h3>
       <p class="hint" id="gas-note">at current gas</p>
       <dl class="facts costs">
         <dt>Register <span id="c-name">the name</span></dt><dd class="mono" id="c-domain">—</dd>
+        <dt>Registration fee</dt><dd class="mono" id="c-fee">—</dd>
         <dt>Deploy the receipt contract</dt><dd class="mono" id="c-deploy">—</dd>
         <dt>Each user who joins</dt><dd class="mono" id="c-user">—</dd>
         <dt>Each transfer</dt><dd class="mono" id="c-transfer">—</dd>
@@ -88,33 +155,94 @@
       <p class="status" id="deploy-status"></p>
     </section>
 
+    <!-- 4 · storage -->
+    <section class="card" id="step-swarm" hidden>
+      <h2>Storage</h2>
+      <p class="hint">
+        Files live on Swarm, paid for by a postage batch this node buys. The node has its
+        own wallet on <strong>Gnosis</strong> holding BZZ and xDAI — not the Sepolia wallet
+        above. Funding the wrong one is the easy mistake here.
+      </p>
+
+      <dl class="facts">
+        <dt>Node</dt><dd class="mono" id="b-status">checking…</dd>
+        <dt>Version</dt><dd class="mono" id="b-version">—</dd>
+      </dl>
+
+      <div id="b-funding" hidden>
+        <h3>Fund the node</h3>
+        <p class="hint">
+          This wallet lives on <strong>Gnosis</strong>, not Sepolia. It needs xDAI for gas
+          and BZZ for postage. Your wallet will be switched to Gnosis before sending.
+        </p>
+        <code class="key" id="b-wallet">—</code>
+        <div class="row">
+          <button class="ghost" id="b-copy">Copy address</button>
+          <span class="mono" id="b-balances">—</span>
+        </div>
+        <div class="packages" id="node-packages">
+          <button class="package wide" id="fund-test">
+            <span class="pk-top">
+              <span class="pk-name">Fund for testing</span>
+              <span class="pk-price">0.02 xDAI + 1 BZZ</span>
+            </span>
+            <span class="pk-note">everything the node needs to run and buy a batch — two confirmations</span>
+          </button>
+          <button class="package" id="send-xdai">
+            <span class="pk-top"><span class="pk-name">xDAI only</span><span class="pk-price">0.05 xDAI</span></span>
+            <span class="pk-note">gas</span>
+          </button>
+          <button class="package" id="send-bzz">
+            <span class="pk-top"><span class="pk-name">BZZ only</span><span class="pk-price">10 BZZ</span></span>
+            <span class="pk-note">postage and retrieval</span>
+          </button>
+        </div>
+        <p class="status" id="node-fund-status"></p>
+      </div>
+
+      <div class="tip" id="b-missing" hidden>
+        <strong>No node reachable.</strong>
+        Start one with <code>docker compose up -d bee</code>, then refresh.
+      </div>
+
+      <dl class="facts" id="stamp-quote" hidden style="margin-top:18px">
+        <dt>Batch lasts</dt><dd class="mono" id="q-ttl">—</dd>
+        <dt>Capacity</dt><dd class="mono" id="q-capacity">—</dd>
+        <dt>Costs</dt><dd class="mono" id="q-cost">—</dd>
+      </dl>
+
+      <div class="row">
+        <button class="primary" id="buy-postage" disabled>Buy a postage batch</button>
+        <button class="ghost" id="b-refresh">Refresh</button>
+      </div>
+      <p class="status" id="swarm-status"></p>
+    </section>
+
     <!-- done -->
-    <section class="panel" id="step-done" hidden>
+    <section class="card" id="step-done" hidden>
       <h2>This server</h2>
       <dl class="facts">
         <dt>Name</dt><dd class="mono" id="d-name">—</dd>
-        <dt>Name registered</dt><dd class="mono" id="d-registered">—</dd>
-        <dt>Receipts</dt><dd class="mono" id="d-address">—</dd>
+        <dt>Registered on chain</dt><dd class="mono" id="d-registered">—</dd>
+        <dt>Receipt contract</dt><dd class="mono" id="d-address">—</dd>
         <dt>Deploy tx</dt><dd class="mono" id="d-tx">—</dd>
+        <dt>Storage</dt><dd class="mono" id="d-storage">—</dd>
+        <dt>Postage batch</dt><dd class="mono" id="d-batch">—</dd>
       </dl>
-
-      <h3 style="margin-top:22px">Wallet</h3>
-      <code class="key" id="d-deployer">—</code>
-      <div class="row">
-        <button class="ghost" id="d-copy">Copy address</button>
-        <span class="mono" id="d-balance">checking…</span>
-      </div>
-      <p class="hint" id="d-runway" style="margin-top:10px"></p>
-
+      <p class="hint" id="d-runway"></p>
       <div class="row">
         <a class="primary" href="/">Go to the app</a>
         <button class="ghost" id="d-refresh">Refresh</button>
       </div>
+      <code class="key" id="d-deployer" hidden></code>
+      <button class="ghost" id="d-copy" hidden>Copy address</button>
+      <span class="mono" id="d-balance" hidden></span>
     </section>
 
-    <p class="foot" id="rpc"></p>
-  </div></main>
+    <p class="admin-foot" id="rpc"></p>
+  </div>
+</main>
 
-  <script type="module" src="setup.bundle.js"></script>
+<script type="module" src="setup.bundle.js"></script>
 </body>
 </html>

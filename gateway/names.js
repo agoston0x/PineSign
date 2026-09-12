@@ -13,6 +13,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { storagePath } from './paths.js'
 
 /** Set from the server's configuration once setup has chosen a name. */
 let PARENT = process.env.PINESIGN_PARENT ?? 'pinesign.eth'
@@ -24,7 +25,7 @@ export function setParent(name) {
 export function getParent() {
   return PARENT
 }
-const FILE = path.resolve('.storage/names.json')
+const FILE = storagePath('names.json')
 const LABEL = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/
 
 let names = null

@@ -16,6 +16,7 @@ import * as names from './names.js'
 import * as setup from './setup.js'
 import * as chain from './chain.js'
 import * as circle from './circle.js'
+import * as admin from './admin.js'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
@@ -31,6 +32,53 @@ app.use((req, res, next) => {
   res.set('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
+})
+
+// ---- admin sign-in ----
+
+/** Who, if anyone, owns this server — asked before any sign-in is attempted. */
+app.get('/api/setup/admin', async (_req, res) => {
+  res.json({ adminAddress: await setup.adminAddress() })
+})
+
+app.post('/api/setup/admin/nonce', (req, res) => {
+  const { address } = req.body ?? {}
+  if (!address) return res.status(400).json({ error: 'address required' })
+  const nonce = admin.issueNonce(address)
+  res.json({ nonce, message: admin.challengeText(nonce, req.get('host')) })
+})
+
+/**
+ * Verify a signature, and on a first run claim the server for that wallet.
+ * Claiming needs the console token as well, so an unclaimed server on a public
+ * address cannot simply be taken by whoever finds it.
+ */
+app.post('/api/setup/admin/verify', async (req, res) => {
+  try {
+    const { address, nonce, signature, token } = req.body ?? {}
+    const result = await admin.verify({ address, nonce, signature, host: req.get('host') })
+    if (!result.ok) return res.status(401).json({ error: result.error })
+
+    const existing = await setup.adminAddress()
+    if (!existing) {
+      if (token !== (await setup.getSetupToken())) {
+        return res.status(403).json({ error: 'the console token is required to claim this server' })
+      }
+      await setup.claimAdmin(result.address)
+    } else if (existing !== result.address) {
+      return res.status(403).json({ error: 'that wallet is not the administrator of this server' })
+    }
+
+    res.json({ session: result.session, address: result.address })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/setup/admin/signout', (req, res) => {
+  const session = req.get('x-admin-session')
+  if (session) admin.endSession(session)
+  res.json({ ok: true })
 })
 
 // ---- setup ----
@@ -85,6 +133,17 @@ app.post('/api/setup/register-name', setup.requireSetupToken, async (req, res) =
 app.post('/api/setup/deploy', setup.requireSetupToken, async (_req, res) => {
   try {
     res.json(await setup.deploy())
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/** Buying postage can take a while; the node waits on Gnosis. */
+app.post('/api/setup/postage', setup.requireSetupToken, async (req, res) => {
+  req.setTimeout(180000)
+  res.setTimeout(180000)
+  try {
+    res.json(await setup.buyPostage(req.body ?? {}))
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
@@ -326,11 +385,16 @@ app.use(express.static(path.join(__dirname, '..', 'web')))
 app.listen(PORT, async () => {
   const state = await setup.status()
   names.setParent(state.parentName)
-  console.log(`pinesign gateway on http://localhost:${PORT}  [swarm: ${swarm.mode}]`)
+
+  console.log(`pinesign gateway on http://localhost:${PORT}  [swarm: ${await swarm.mode()}]`)
   if (state.step === 'ready') {
     console.log(`  ${state.parentName} · receipts at ${state.receiptsAddress}`)
   } else {
-    console.log(`  not configured yet — finish setup at:`)
-    console.log(`  http://localhost:${PORT}/setup.html?token=${setup.SETUP_TOKEN}`)
+    console.log('  not configured yet')
   }
+
+  // Always printed: this link is the only way into the admin panel, and an
+  // operator who has lost it has lost access to their own server.
+  const token = await setup.getSetupToken()
+  console.log(`  admin: http://localhost:${PORT}/setup.html?token=${token}`)
 })

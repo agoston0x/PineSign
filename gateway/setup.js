@@ -15,11 +15,37 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { privateKeyToAccount } from 'viem/accounts'
 import * as chain from './chain.js'
+import * as bee from './bee.js'
+import * as ens from './ens.js'
+import { backupDeployer, BACKUP_DIR } from './backup.js'
+import * as admin from './admin.js'
+import { storagePath } from './paths.js'
 
-const FILE = path.resolve('.storage/config.json')
+const FILE = storagePath('config.json')
 
-/** Printed once at boot. Without it, nobody passing by can configure the server. */
-export const SETUP_TOKEN = process.env.SETUP_TOKEN ?? randomBytes(16).toString('hex')
+/**
+ * The admin token.
+ *
+ * Persisted rather than regenerated, because this is the only way back into the
+ * admin panel — a token that changed on every restart would lock the operator
+ * out of their own server. SETUP_TOKEN in the environment overrides it.
+ */
+let setupToken = null
+
+export async function getSetupToken() {
+  if (setupToken) return setupToken
+  if (process.env.SETUP_TOKEN) {
+    setupToken = process.env.SETUP_TOKEN
+    return setupToken
+  }
+  const c = await load()
+  if (!c.setupToken) {
+    c.setupToken = randomBytes(16).toString('hex')
+    await persist()
+  }
+  setupToken = c.setupToken
+  return setupToken
+}
 
 let config = null
 
@@ -27,13 +53,20 @@ async function load() {
   if (config) return config
   try {
     config = JSON.parse(await readFile(FILE, 'utf8'))
-  } catch {
+  } catch (err) {
+    // A file that exists but will not parse is a problem to report, not to
+    // paper over: persisting defaults on top of it would destroy the key.
+    if (err.code !== 'ENOENT') {
+      throw new Error(`${FILE} exists but could not be read: ${err.message}`)
+    }
     config = {
       parentName: null,
       deployer: null,
       receiptsAddress: null,
       deployTx: null,
       nameRegistered: false,
+      postageBatchId: null,
+      adminAddress: null,
     }
   }
   return config
@@ -47,6 +80,8 @@ async function persist() {
 export async function get() {
   return load()
 }
+
+export { BACKUP_DIR }
 
 export async function parentName() {
   return (await load()).parentName
@@ -62,7 +97,18 @@ export async function receiptsAddress() {
  */
 export async function status() {
   const c = await load()
-  const step = !c.parentName ? 'name' : !c.deployer ? 'keys' : !c.receiptsAddress ? 'fund' : 'ready'
+  // The funding step is not finished until both things it pays for exist.
+  // Deploying the contract alone used to advance the flow, quietly leaving the
+  // server without the name every user's subname hangs from.
+  const step = !c.parentName
+    ? 'name'
+    : !c.deployer
+      ? 'keys'
+      : !c.receiptsAddress || !c.nameRegistered
+        ? 'fund'
+        : !c.postageBatchId
+          ? 'swarm'
+          : 'ready'
 
   const out = {
     step,
@@ -80,10 +126,9 @@ export async function status() {
   // admin can see what they are funding before they send anything.
   if (c.deployer) {
     const label = c.parentName?.replace(/\.eth$/, '') ?? null
-    const [balance, budget] = await Promise.all([
-      chain.balanceOf(c.deployer.address).catch(() => null),
-      chain.budget(label).catch(() => null),
-    ])
+    // The balance is read first so packages can be quoted as a top-up.
+    const balance = await chain.balanceOf(c.deployer.address).catch(() => null)
+    const budget = await chain.budget(label, BigInt(balance?.wei ?? 0)).catch(() => null)
     out.balance = balance
     out.budget = budget
 
@@ -92,23 +137,60 @@ export async function status() {
       const needed = BigInt(budget.deploy.wei) * 2n
       out.fundedEnough = BigInt(balance.wei) > needed
     }
+
+    // Under ENSv2 the fee is paid in a token the server mints, so registering
+    // costs only gas — four transactions of it. The check is therefore against
+    // the gas estimate, not against a price in ether.
+    if (balance && budget) {
+      const needed = (BigInt(budget.registrationGas.wei) * 150n) / 100n
+      out.canRegisterName = BigInt(balance.wei) >= needed
+      out.registrationShortfall = out.canRegisterName
+        ? null
+        : chain.formatWei(needed - BigInt(balance.wei))
+    }
   }
 
   if (c.parentName && !c.nameRegistered) {
     const label = c.parentName.replace(/\.eth$/, '')
-    out.nameAvailable = await chain.ensAvailable(label).catch(() => null)
+    const [available, registrar, price] = await Promise.all([
+      ens.isAvailable(label).catch(() => null),
+      ens.health(),
+      ens.registerPrice(label, 31536000).catch(() => null),
+    ])
+    out.nameAvailable = available
+    out.registrationAvailable = registrar.available
+    out.registrationBlockedReason = registrar.reason
+    // Priced in a token, not in ether — so the name itself costs no ETH.
+    out.registrationFee = price ? `${Number(price.formatted).toFixed(2)} ${price.symbol}` : null
   }
   out.nameRegistered = Boolean(c.nameRegistered)
+  // Going back is only meaningful while nothing is committed on chain.
+  out.canChangeName = !c.nameRegistered
+  out.postageBatchId = c.postageBatchId ?? null
+
+  // The node is only worth asking about once there is a server to attach it to.
+  if (c.receiptsAddress || c.postageBatchId) {
+    out.bee = await bee.overview().catch((err) => ({ reachable: false, error: err.message }))
+  }
 
   return out
 }
 
+/**
+ * Choose, or change, the name this server issues subnames under.
+ *
+ * Changeable right up until it is registered on chain — an operator who picked
+ * the wrong name should not have to wipe the server to fix it. Once registered
+ * it is fixed, because subnames already issued hang beneath it.
+ */
 export async function chooseName(name) {
   const clean = String(name ?? '').trim().toLowerCase()
-  if (!/^[a-z0-9-]+\.eth$/.test(clean)) throw new Error('expected a name like pinesign.eth')
+  if (!/^[a-z0-9-]{3,}\.eth$/.test(clean)) throw new Error('expected a name like pinesign.eth')
 
   const c = await load()
-  if (c.parentName) throw new Error('this server already has a name')
+  if (c.nameRegistered) {
+    throw new Error(`${c.parentName} is already registered on chain and cannot be changed`)
+  }
 
   c.parentName = clean
   await persist()
@@ -128,6 +210,12 @@ export async function generateDeployer() {
   const account = privateKeyToAccount(privateKey)
   c.deployer = { address: account.address, privateKey }
   await persist()
+
+  // Outside .storage, so deleting that directory does not destroy the wallet
+  // along with it.
+  const backup = await backupDeployer(c.deployer, { parentName: c.parentName })
+  console.log(`  deployer key backed up to ${backup}`)
+
   return status()
 }
 
@@ -144,8 +232,11 @@ export async function registerName() {
   if (c.nameRegistered) throw new Error('already registered')
 
   const label = c.parentName.replace(/\.eth$/, '')
-  const result = await chain.registerEnsName(c.deployer.privateKey, label)
+  const result = await ens.register(c.deployer.privateKey, label, {
+    onStep: (m) => console.log(`  registering ${label}.eth: ${m}`),
+  })
 
+  // True whether we just bought it or discovered we already had.
   c.nameRegistered = true
   c.nameRegistration = result
   await persist()
@@ -164,9 +255,69 @@ export async function deploy() {
   return status()
 }
 
-/** Setup is only reachable by someone holding the token from the server console. */
-export function requireSetupToken(req, res, next) {
+/**
+ * Buy postage, and remember the batch.
+ *
+ * Depth is capacity, amount is lifetime. The defaults are a small batch that
+ * comfortably outlives a transfer window — enough to demonstrate the system
+ * without committing much BZZ.
+ */
+export async function buyPostage({ ttlSeconds, depth } = {}) {
+  const c = await load()
+  // The batch is bought to outlive a transfer window, so a file and the record
+  // pointing at it lapse together rather than one outliving the other.
+  const { batchID } = await bee.buyStamp({
+    ttlSeconds: ttlSeconds ?? Number(process.env.TRANSFER_TTL_MS ?? 259200000) / 1000,
+    depth,
+  })
+  if (!batchID) throw new Error('the node did not return a batch id')
+
+  c.postageBatchId = batchID
+  await persist()
+  return status()
+}
+
+export async function adminAddress() {
+  return (await load()).adminAddress
+}
+
+/**
+ * Claim the server for a wallet.
+ *
+ * Only possible once, and only by someone already holding the console token —
+ * otherwise the first stranger to find an unclaimed server would own it.
+ */
+export async function claimAdmin(address) {
+  const c = await load()
+  if (c.adminAddress) throw new Error('this server already has an administrator')
+  c.adminAddress = address.toLowerCase()
+  await persist()
+  return c.adminAddress
+}
+
+/**
+ * Admin access: a signed-in wallet, or the console token.
+ *
+ * The token remains valid so an admin who loses their wallet can still get in,
+ * and so a fresh server can be claimed in the first place.
+ */
+export async function requireSetupToken(req, res, next) {
+  const c = await load()
+
+  const session = req.get('x-admin-session')
+  if (session) {
+    const who = admin.sessionAddress(session)
+    if (who && (!c.adminAddress || who === c.adminAddress)) {
+      req.adminAddress = who
+      return next()
+    }
+  }
+
   const supplied = req.get('x-setup-token') ?? req.query.token
-  if (supplied !== SETUP_TOKEN) return res.status(401).json({ error: 'bad or missing setup token' })
-  next()
+  if (supplied === (await getSetupToken())) {
+    req.viaToken = true
+    return next()
+  }
+
+  return res.status(401).json({ error: 'admin sign-in required' })
 }

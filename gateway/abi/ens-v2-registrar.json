@@ -1,0 +1,749 @@
+[
+ {
+  "name": "CommitmentTooNew",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "validFrom",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "blockTimestamp",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ]
+ },
+ {
+  "name": "CommitmentTooOld",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "validTo",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "blockTimestamp",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ]
+ },
+ {
+  "name": "DurationTooShort",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "minDuration",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ]
+ },
+ {
+  "name": "InvalidOwner",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "MaxCommitmentAgeTooLow",
+  "type": "error",
+  "inputs": []
+ },
+ {
+  "name": "NameNotAvailable",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   }
+  ]
+ },
+ {
+  "name": "NameNotRenewable",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   }
+  ]
+ },
+ {
+  "name": "OwnableInvalidOwner",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "OwnableUnauthorizedAccount",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "SafeERC20FailedOperation",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "name": "UnexpiredCommitmentExists",
+  "type": "error",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "name": "CommitmentMade",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "NameRegistered",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "tokenId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "label",
+    "type": "string",
+    "indexed": false,
+    "internalType": "string"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "subregistry",
+    "type": "address",
+    "indexed": false,
+    "internalType": "contract IRegistry"
+   },
+   {
+    "name": "resolver",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "indexed": false,
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "referrer",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "base",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "premium",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "NameRenewed",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "tokenId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "label",
+    "type": "string",
+    "indexed": false,
+    "internalType": "string"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   },
+   {
+    "name": "newExpiry",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "indexed": false,
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "referrer",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "OwnershipTransferred",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "RentPriceOracleUpdated",
+  "type": "event",
+  "inputs": [
+   {
+    "name": "oracle",
+    "type": "address",
+    "indexed": false,
+    "internalType": "contract IRentPriceOracle"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "name": "BENEFICIARY",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "ETH_REGISTRY",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IPermissionedRegistry"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "GRACE_PERIOD",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MAX_COMMITMENT_AGE",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MIN_COMMITMENT_AGE",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MIN_REGISTER_DURATION",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "MIN_RENEW_DURATION",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "commit",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "commitmentAt",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "commitment",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "commitTime",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "getRegisterPrice",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "internalType": "contract IERC20"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "base",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "premium",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "getRemainingGracePeriod",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "getRenewPrice",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "internalType": "contract IERC20"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "isAvailable",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "isRenewable",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "makeCommitment",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "secret",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "subregistry",
+    "type": "address",
+    "internalType": "contract IRegistry"
+   },
+   {
+    "name": "resolver",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "referrer",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "pure"
+ },
+ {
+  "name": "owner",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "register",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "secret",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "subregistry",
+    "type": "address",
+    "internalType": "contract IRegistry"
+   },
+   {
+    "name": "resolver",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "referrer",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "tokenId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "renew",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "label",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "paymentToken",
+    "type": "address",
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "referrer",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "renounceOwnership",
+  "type": "function",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "rentPriceOracle",
+  "type": "function",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IRentPriceOracle"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "setRentPriceOracle",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "oracle",
+    "type": "address",
+    "internalType": "contract IRentPriceOracle"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "name": "supportsInterface",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "interfaceId",
+    "type": "bytes4",
+    "internalType": "bytes4"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "name": "transferOwnership",
+  "type": "function",
+  "inputs": [
+   {
+    "name": "newOwner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ }
+]

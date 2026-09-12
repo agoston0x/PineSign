@@ -9,8 +9,9 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { storagePath } from './paths.js'
 
-const FILE = path.resolve('.storage/transfers.json')
+const FILE = storagePath('transfers.json')
 const TTL_MS = Number(process.env.TRANSFER_TTL_MS ?? 3 * 24 * 60 * 60 * 1000)
 
 let transfers = null

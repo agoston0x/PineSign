@@ -14,3 +14,4 @@ contracts/lib/
 
 # Working notes, not for the repo
 scope.md
+.storage-test/
