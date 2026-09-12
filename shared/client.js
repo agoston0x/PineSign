@@ -74,12 +74,16 @@ export class Gateway {
   // ---- names ----
 
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer, label) {
+  async registerName(signer, label, userToken) {
     return this.#post('/api/name/register', {
       ...(await this.#auth(signer)),
       label,
-      address: signer.address ?? null,
+      userToken,
     })
+  }
+
+  nameAvailable(label) {
+    return this.#json(`/api/name/available/${encodeURIComponent(label)}`)
   }
 
   /** Name to key — how a sender finds out where to encrypt. */

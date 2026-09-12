@@ -367,12 +367,15 @@ var Gateway = class {
   }
   // ---- names ----
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer, label) {
+  async registerName(signer, label, userToken) {
     return this.#post("/api/name/register", {
       ...await this.#auth(signer),
       label,
-      address: signer.address ?? null
+      userToken
     });
+  }
+  nameAvailable(label) {
+    return this.#json(`/api/name/available/${encodeURIComponent(label)}`);
   }
   /** Name to key — how a sender finds out where to encrypt. */
   resolveName(name2) {
@@ -463,8 +466,15 @@ function save(patch) {
   localStorage.setItem(STORE, JSON.stringify(session));
   return session;
 }
+function clearSession() {
+  session = null;
+  localStorage.removeItem(STORE);
+}
 function currentWallet() {
   return session?.wallet ?? null;
+}
+function sessionToken() {
+  return session?.userToken ?? null;
 }
 async function api(path, body) {
   const res = await fetch(path, {
@@ -540,33 +550,80 @@ async function signInWithGoogle(onStep) {
   await sdk.performLogin(GOOGLE);
 }
 
-// web/src/app.js
+// web/src/session.js
+var short = (addr) => `${addr.slice(0, 6)}\u2026${addr.slice(-4)}`;
+function renderAccountChip(onGetStarted) {
+  const slot = document.getElementById("account-slot");
+  if (!slot) return;
+  const wallet2 = currentWallet();
+  if (!wallet2) {
+    slot.innerHTML = "";
+    const chip = document.createElement(onGetStarted ? "button" : "a");
+    chip.className = "cta-btn";
+    chip.textContent = "Get started";
+    if (onGetStarted) {
+      chip.addEventListener("click", onGetStarted);
+    } else {
+      chip.href = "/#get-started";
+    }
+    slot.append(chip);
+    return;
+  }
+  slot.innerHTML = `
+    <div class="account-chip" tabindex="0">
+      <span class="dot"></span>
+      <span class="addr">${short(wallet2.address)}</span>
+      <div class="account-menu">
+        <div class="full">${wallet2.address}</div>
+        <button class="signout">Sign out</button>
+      </div>
+    </div>`;
+  slot.querySelector(".signout").addEventListener("click", () => {
+    clearSession();
+    location.reload();
+  });
+}
+
+// web/src/onboard.js
 var el = (id) => document.getElementById(id);
 var gateway = new Gateway(location.origin);
 var identity = null;
 var wallet = null;
 var name = null;
+var ready2 = false;
+var signInAvailable = false;
+function status(node, message, kind = "") {
+  const n = el(node);
+  n.textContent = message;
+  n.className = `status ${kind}`.trim();
+}
 function mark(step, state) {
   el(step).className = state;
 }
-function status(node, message, kind = "") {
-  el(node).textContent = message;
-  el(node).className = `status ${kind}`.trim();
+function openModal() {
+  el("onboard").hidden = false;
+  document.body.style.overflow = "hidden";
+  if (!ready2) boot();
+}
+function closeModal() {
+  el("onboard").hidden = true;
+  document.body.style.overflow = "";
 }
 function renderAccount() {
   if (!wallet) return mark("s-account", "todo");
   el("wallet").textContent = wallet.address;
   el("wallet").hidden = false;
   el("signin").hidden = true;
-  el("account-hint").textContent = "Your wallet. It owns your name and signs for the files you receive.";
+  el("account-hint").textContent = "Your wallet. It will own your name and sign for what you receive.";
   mark("s-account", "done");
+  renderAccountChip(openModal);
 }
 function renderExtension() {
   if (!identity) return mark("s-extension", "todo");
   el("enc-key").textContent = identity.publicKey;
   el("enc-key").hidden = false;
   el("extension-install").hidden = true;
-  el("extension-hint").textContent = "Installed. This is the key that will decrypt files sent to you.";
+  el("extension-hint").textContent = "Installed. This key decrypts files sent to you.";
   mark("s-extension", "done");
 }
 function renderName() {
@@ -574,33 +631,52 @@ function renderName() {
     el("your-name").textContent = name.name;
     el("your-name").hidden = false;
     el("claim-form").hidden = true;
-    el("name-actions").hidden = false;
+    el("done-note").hidden = false;
     return mark("s-name", "done");
   }
-  const ready2 = Boolean(identity && wallet);
+  const can = Boolean(identity && wallet);
   el("claim-form").hidden = false;
-  if (!ready2) {
-    status("name-status", identity ? "Sign in first." : "Install the extension first.");
+  mark("s-name", can ? "todo" : "blocked");
+  if (!can) {
+    status("name-status", wallet ? "Install the extension first." : "Sign in first.");
   } else {
     status("name-status", "");
   }
-  mark("s-name", ready2 ? "todo" : "blocked");
 }
-async function refreshName() {
-  name = identity ? await gateway.reverseName(identity.publicKey) : null;
-  renderName();
-}
+var checkTimer = null;
+var checked = null;
 el("label").addEventListener("input", () => {
+  checked = null;
+  el("claim").disabled = true;
+  el("label-check").textContent = "";
+  el("label-check").className = "resolved";
   const label = el("label").value.trim().toLowerCase();
-  el("claim").disabled = !(identity && wallet && /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label));
+  if (label.length < 3) return;
+  clearTimeout(checkTimer);
+  el("label-check").textContent = "checking\u2026";
+  checkTimer = setTimeout(async () => {
+    try {
+      const result = await gateway.nameAvailable(label);
+      if (result.available) {
+        checked = label;
+        el("label-check").textContent = `${result.name} is free.`;
+        el("label-check").className = "resolved ok";
+        el("claim").disabled = !(identity && wallet);
+      } else {
+        el("label-check").textContent = result.reason ?? "Already taken.";
+        el("label-check").className = "resolved error";
+      }
+    } catch (err) {
+      el("label-check").textContent = err.message;
+      el("label-check").className = "resolved error";
+    }
+  }, 300);
 });
 el("claim").addEventListener("click", async () => {
   el("claim").disabled = true;
   status("name-status", "Claiming\u2026");
   try {
-    const signer = await bridgeSigner();
-    signer.address = wallet.address;
-    name = await gateway.registerName(signer, el("label").value.trim().toLowerCase());
+    name = await gateway.registerName(await bridgeSigner(), checked, sessionToken());
     status("name-status", "");
     renderName();
   } catch (err) {
@@ -608,27 +684,18 @@ el("claim").addEventListener("click", async () => {
     el("claim").disabled = false;
   }
 });
-el("copy-name").addEventListener("click", () => {
-  navigator.clipboard.writeText(name.name);
-  el("copy-name").textContent = "Copied";
-  setTimeout(() => el("copy-name").textContent = "Copy name", 1200);
-});
 el("signin").addEventListener("click", async () => {
-  console.log("[pinesign] sign-in clicked");
   el("signin").disabled = true;
   status("signin-status", "Starting\u2026");
   try {
-    await signInWithGoogle((m) => {
-      console.log("[pinesign]", m);
-      status("signin-status", m);
-    });
+    await signInWithGoogle((m) => status("signin-status", m));
   } catch (err) {
-    console.error("[pinesign] sign-in failed", err);
     status("signin-status", err.message, "error");
     el("signin").disabled = false;
   }
 });
 async function boot() {
+  ready2 = true;
   el("signin").disabled = true;
   const circleReady = initSignIn({
     onStep: (m) => status("signin-status", m),
@@ -652,16 +719,46 @@ async function boot() {
     el("account-hint").textContent = "This server has no Circle credentials configured.";
     mark("s-account", "blocked");
   } else {
+    signInAvailable = true;
     el("signin").disabled = false;
     wallet = circle.wallet ?? currentWallet();
     renderAccount();
   }
-  await refreshName();
+  if (identity) {
+    name = await gateway.reverseName(identity.publicKey);
+  }
+  renderName();
 }
-boot().catch((err) => {
-  console.error("[pinesign] boot failed", err);
-  status("signin-status", `Could not start: ${err.message}`, "error");
+function resumeIfReturning() {
+  if (location.hash === "#get-started") openModal();
+}
+function resetSignIn() {
+  if (currentWallet() || !signInAvailable) return;
+  el("signin").disabled = false;
+  el("signin").hidden = false;
+  status("signin-status", "");
+}
+addEventListener("pageshow", resetSignIn);
+addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") resetSignIn();
 });
+
+// web/src/lander.js
+renderAccountChip(openModal);
+for (const button of document.querySelectorAll("[data-open-onboard]")) {
+  button.addEventListener("click", openModal);
+}
+for (const target of document.querySelectorAll("[data-close-onboard]")) {
+  target.addEventListener("click", closeModal);
+}
+document.getElementById("mobile-start")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  openModal();
+});
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+resumeIfReturning();
 /*! Bundled license information:
 
 @noble/hashes/esm/utils.js:

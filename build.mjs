@@ -7,7 +7,9 @@ const targets = [
   { in: 'extension/src/background.js', out: 'extension/lib/background.bundle.js' },
   { in: 'web/src/claim.js', out: 'web/claim.bundle.js' },
   { in: 'web/src/setup.js', out: 'web/setup.bundle.js' },
-  { in: 'web/src/app.js', out: 'web/app.bundle.js' },
+  { in: 'web/src/lander.js', out: 'web/lander.bundle.js' },
+  { in: 'web/src/callback.js', out: 'web/callback.bundle.js' },
+  { in: 'web/src/nav.js', out: 'web/nav.bundle.js' },
 ]
 
 for (const target of targets) {

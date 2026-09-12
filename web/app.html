@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Get started · PineSign</title>
+  <title>Signing in · PineSign</title>
   <link rel="icon" href="assets/favicon.png" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -11,96 +11,17 @@
 
 <nav id="nav" class="scrolled">
   <a class="brand" href="/"><img src="assets/pine.png" alt="" /><span>PineSign</span></a>
-  <div class="links">
-    <a href="docs.html">Docs</a>
-  </div>
+  <div class="links"><a href="docs.html">Docs</a></div>
 </nav>
 
 <main class="page">
-  <div class="inner">
-    <div class="section-pre">Get started</div>
-    <h2 class="section-title">Three things, once.</h2>
-    <p class="section-sub">
-      An account to be, an extension to encrypt with, and a name so people can reach you.
-    </p>
-
-    <section class="panel">
-      <ol class="setup-steps">
-        <li id="s-account" class="todo">
-          <div class="marker"></div>
-          <div class="body">
-            <h3>An account</h3>
-            <p class="hint" id="account-hint">Sign in with Google. Circle creates a wallet only you hold the key to.</p>
-            <code class="key" id="wallet" hidden></code>
-            <div class="row"><button class="primary" id="signin">Sign in with Google</button></div>
-            <p class="status" id="signin-status"></p>
-          </div>
-        </li>
-
-        <li id="s-extension" class="todo">
-          <div class="marker"></div>
-          <div class="body">
-            <h3>The extension</h3>
-            <p class="hint" id="extension-hint">
-              Your files are encrypted on your own machine, by a key this page is never
-              allowed to see. That key lives in the extension.
-            </p>
-            <p class="hint mono" id="extension-install">Load <code>extension/</code> unpacked at chrome://extensions</p>
-            <code class="key" id="enc-key" hidden></code>
-          </div>
-        </li>
-
-        <li id="s-name" class="todo">
-          <div class="marker"></div>
-          <div class="body">
-            <h3>A name</h3>
-            <p class="hint">
-              People send to your name, not to a key. Claiming it publishes your
-              encryption key in its records — that is how anyone finds where to encrypt.
-            </p>
-            <div id="claim-form">
-              <div class="row tight">
-                <input id="label" type="text" placeholder="alice" spellcheck="false" />
-                <span class="suffix" id="suffix">.pinesign.eth</span>
-              </div>
-              <div class="row"><button class="primary" id="claim" disabled>Claim it</button></div>
-            </div>
-            <code class="key" id="your-name" hidden></code>
-            <div class="row" id="name-actions" hidden>
-              <button class="ghost" id="copy-name">Copy name</button>
-            </div>
-            <p class="status" id="name-status"></p>
-          </div>
-        </li>
-      </ol>
-    </section>
-
-    <p class="hint" id="ready-note" hidden>
-      You are set up. Open the extension to send a file.
-    </p>
+  <div class="inner" style="text-align:center">
+    <div class="spinner"></div>
+    <p class="status" id="cb-status">Completing sign-in…</p>
+    <p hidden id="cb-back"><a href="/#get-started" class="btn-ghost">Back to PineSign</a></p>
   </div>
 </main>
 
-<div id="boot-error" hidden></div>
-
-<!--
-  A module that throws while loading leaves no trace on the page and the button
-  simply does nothing. Catch it at the window level and show it, so a failure is
-  never silent.
--->
-<script>
-  function showBootError(what, detail) {
-    const box = document.getElementById('boot-error')
-    box.hidden = false
-    box.textContent = `${what}: ${detail ?? 'no detail'}`
-  }
-  addEventListener('error', (e) => {
-    if (e.target instanceof HTMLScriptElement) return showBootError('Script failed to load', e.target.src)
-    showBootError('Error', e.message)
-  }, true)
-  addEventListener('unhandledrejection', (e) => showBootError('Unhandled rejection', e.reason?.message ?? String(e.reason)))
-</script>
-
-<script type="module" src="app.bundle.js"></script>
+<script type="module" src="callback.bundle.js"></script>
 </body>
 </html>

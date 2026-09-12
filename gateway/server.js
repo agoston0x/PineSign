@@ -70,6 +70,18 @@ app.post('/api/setup/keys', setup.requireSetupToken, async (_req, res) => {
   }
 })
 
+/** Buying the name takes two transactions and a mandated wait between them. */
+app.post('/api/setup/register-name', setup.requireSetupToken, async (req, res) => {
+  // Two transactions plus the registrar's enforced wait; well past any default.
+  req.setTimeout(300000)
+  res.setTimeout(300000)
+  try {
+    res.json(await setup.registerName())
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
 app.post('/api/setup/deploy', setup.requireSetupToken, async (_req, res) => {
   try {
     res.json(await setup.deploy())
@@ -134,10 +146,37 @@ app.post('/api/circle/wallets', async (req, res) => {
 
 // ---- names ----
 
-/** Claim a name and publish an encryption key under it. */
+/** Is this label free? Asked while the user types. */
+app.get('/api/name/available/:label', async (req, res) => {
+  const label = req.params.label.toLowerCase()
+  if (!names.validLabel(label)) {
+    return res.json({ label, available: false, reason: 'A name is 3-32 characters: letters, digits and hyphens.' })
+  }
+  const taken = await names.resolve(label)
+  res.json({ label, name: names.fullName(label), available: !taken })
+})
+
+/**
+ * Claim a name and publish an encryption key under it.
+ *
+ * Two proofs are required, because the name binds two different things: the
+ * extension signs, which proves the encryption key is theirs, and the Circle
+ * user token proves the wallet is theirs. The wallet address is read back from
+ * Circle rather than accepted from the browser — a page could claim any address.
+ */
 app.post('/api/name/register', requireSignature, async (req, res) => {
   try {
-    const { label, address } = req.body
+    const { label, userToken } = req.body
+
+    let address = null
+    if (userToken) {
+      const { wallets } = await circle.listWallets(userToken)
+      address = wallets?.[0]?.address ?? null
+      if (!address) return res.status(400).json({ error: 'that account has no wallet yet' })
+    } else if (circle.configured) {
+      return res.status(401).json({ error: 'sign in before claiming a name' })
+    }
+
     const record = await names.register(String(label ?? '').toLowerCase(), {
       pubKey: req.pubKey,
       address,

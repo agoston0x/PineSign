@@ -57,31 +57,59 @@
 
     <!-- 3: fund -->
     <section class="panel step" id="step-fund" hidden>
-      <h2><span class="num">3</span> Fund it</h2>
-      <p class="hint">Send Sepolia ETH to this address. The page notices when it arrives.</p>
+      <h2><span class="num">3</span> Fund the server</h2>
+      <p class="hint">
+        This wallet pays for everything your users do not: the name, the contract, and
+        every subname and receipt after that. Send it Sepolia ETH — the page notices when
+        it arrives.
+      </p>
       <code class="key" id="deployer">…</code>
       <div class="row">
         <button class="ghost" id="copy-deployer">Copy address</button>
         <span class="mono" id="balance">checking…</span>
       </div>
-      <dl class="facts" style="margin-top:14px">
-        <dt>Deployment costs</dt><dd class="mono" id="cost">—</dd>
-        <dt>Suggested float</dt><dd class="mono" id="suggested">—</dd>
+
+      <h3 style="margin-top:22px">What it will cost</h3>
+      <p class="hint" id="gas-note">at current gas</p>
+      <dl class="facts costs">
+        <dt>Register <span id="c-name">the name</span></dt><dd class="mono" id="c-domain">—</dd>
+        <dt>Deploy the receipt contract</dt><dd class="mono" id="c-deploy">—</dd>
+        <dt>Each user who joins</dt><dd class="mono" id="c-user">—</dd>
+        <dt>Each transfer</dt><dd class="mono" id="c-transfer">—</dd>
+        <dt class="sep">First 100 users</dt><dd class="mono sep" id="c-100users">—</dd>
+        <dt>First 100 transfers</dt><dd class="mono" id="c-100transfers">—</dd>
+        <dt class="total">Suggested float</dt><dd class="mono total" id="c-suggested">—</dd>
       </dl>
-      <div class="row"><button class="primary" id="deploy" disabled>Deploy the contract</button></div>
+
+      <div class="row">
+        <button class="primary" id="register-name" hidden>Register the name</button>
+        <button class="primary" id="deploy" disabled>Deploy the contract</button>
+      </div>
       <p class="status" id="deploy-status"></p>
     </section>
 
     <!-- done -->
     <section class="panel" id="step-done" hidden>
-      <h2>Ready</h2>
+      <h2>This server</h2>
       <dl class="facts">
         <dt>Name</dt><dd class="mono" id="d-name">—</dd>
+        <dt>Name registered</dt><dd class="mono" id="d-registered">—</dd>
         <dt>Receipts</dt><dd class="mono" id="d-address">—</dd>
         <dt>Deploy tx</dt><dd class="mono" id="d-tx">—</dd>
-        <dt>Deployer</dt><dd class="mono" id="d-deployer">—</dd>
       </dl>
-      <div class="row"><a class="primary" href="/">Go to the app</a></div>
+
+      <h3 style="margin-top:22px">Wallet</h3>
+      <code class="key" id="d-deployer">—</code>
+      <div class="row">
+        <button class="ghost" id="d-copy">Copy address</button>
+        <span class="mono" id="d-balance">checking…</span>
+      </div>
+      <p class="hint" id="d-runway" style="margin-top:10px"></p>
+
+      <div class="row">
+        <a class="primary" href="/">Go to the app</a>
+        <button class="ghost" id="d-refresh">Refresh</button>
+      </div>
     </section>
 
     <p class="foot" id="rpc"></p>

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "gateway": "node gateway/server.js",
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "test": "./test/run.sh",
+    "test:contracts": "cd contracts && forge test"
   },
   "dependencies": {
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",

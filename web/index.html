@@ -16,7 +16,7 @@
   </a>
   <div class="links">
     <a href="docs.html">Docs</a>
-    <a href="app.html" class="cta-btn">Get started</a>
+    <span id="account-slot"></span>
   </div>
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span><span></span><span></span>
@@ -25,7 +25,7 @@
 
 <div id="mobileMenu">
   <a href="docs.html">Docs</a>
-  <a href="app.html">Get started</a>
+  <a href="#get-started" id="mobile-start">Get started</a>
 </div>
 
 <!-- 1 · HERO -->
@@ -40,7 +40,7 @@
           written once — editable by nobody, including us.
         </p>
         <div class="hero-btns">
-          <a href="app.html" class="btn-primary">Get started</a>
+          <button class="btn-primary" data-open-onboard>Get started</button>
           <a href="docs.html" class="btn-ghost">Read the docs</a>
         </div>
       </div>
@@ -145,6 +145,66 @@
   </div>
 </footer>
 
+
+<!-- SIGN-UP MODAL -->
+<div id="onboard" hidden>
+  <div class="modal-backdrop" data-close-onboard></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Get started">
+    <button class="modal-x" data-close-onboard aria-label="Close">×</button>
+
+    <div class="section-pre">Get started</div>
+    <h2 class="modal-title">Three things, once.</h2>
+
+    <ol class="setup-steps">
+      <li id="s-account" class="todo">
+        <div class="marker"></div>
+        <div class="body">
+          <h3>An account</h3>
+          <p class="hint" id="account-hint">Sign in with Google. Circle creates a wallet only you hold the key to.</p>
+          <code class="key" id="wallet" hidden></code>
+          <div class="row"><button class="primary" id="signin">Sign in with Google</button></div>
+          <p class="status" id="signin-status"></p>
+        </div>
+      </li>
+
+      <li id="s-extension" class="todo">
+        <div class="marker"></div>
+        <div class="body">
+          <h3>The extension</h3>
+          <p class="hint" id="extension-hint">
+            Files are encrypted on your own machine, by a key this page is never allowed
+            to see. That key lives in the extension.
+          </p>
+          <p class="hint mono" id="extension-install">Load <code>extension/</code> unpacked at chrome://extensions</p>
+          <code class="key" id="enc-key" hidden></code>
+        </div>
+      </li>
+
+      <li id="s-name" class="todo">
+        <div class="marker"></div>
+        <div class="body">
+          <h3>A name</h3>
+          <p class="hint">People send to your name, not to a key. Claiming it publishes your encryption key in its records.</p>
+          <div id="claim-form">
+            <div class="row tight">
+              <input id="label" type="text" placeholder="alice" spellcheck="false" />
+              <span class="suffix" id="suffix">.pinesign.eth</span>
+            </div>
+            <p class="resolved" id="label-check"></p>
+            <div class="row"><button class="primary" id="claim" disabled>Claim it</button></div>
+          </div>
+          <code class="key" id="your-name" hidden></code>
+          <p class="status" id="name-status"></p>
+        </div>
+      </li>
+    </ol>
+
+    <p class="hint" id="done-note" hidden>
+      You are set up. Open the extension to send a file.
+    </p>
+  </div>
+</div>
+
 <script>
   const nav = document.getElementById('nav')
   addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 20))
@@ -152,5 +212,6 @@
     document.getElementById('mobileMenu').classList.toggle('open'))
 </script>
 
+<script type="module" src="lander.bundle.js"></script>
 </body>
 </html>

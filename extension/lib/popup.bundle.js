@@ -3280,12 +3280,15 @@ var Gateway = class {
   }
   // ---- names ----
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer2, label) {
+  async registerName(signer2, label, userToken) {
     return this.#post("/api/name/register", {
       ...await this.#auth(signer2),
       label,
-      address: signer2.address ?? null
+      userToken
     });
+  }
+  nameAvailable(label) {
+    return this.#json(`/api/name/available/${encodeURIComponent(label)}`);
   }
   /** Name to key — how a sender finds out where to encrypt. */
   resolveName(name) {

@@ -55,6 +55,11 @@ export function currentWallet() {
   return session?.wallet ?? null
 }
 
+/** The Circle user token, which the server exchanges for the wallet address. */
+export function sessionToken() {
+  return session?.userToken ?? null
+}
+
 async function api(path, body) {
   const res = await fetch(path, {
     method: 'POST',

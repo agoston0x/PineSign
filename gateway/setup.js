@@ -28,7 +28,13 @@ async function load() {
   try {
     config = JSON.parse(await readFile(FILE, 'utf8'))
   } catch {
-    config = { parentName: null, deployer: null, receiptsAddress: null, deployTx: null }
+    config = {
+      parentName: null,
+      deployer: null,
+      receiptsAddress: null,
+      deployTx: null,
+      nameRegistered: false,
+    }
   }
   return config
 }
@@ -70,16 +76,29 @@ export async function status() {
     fundedEnough: false,
   }
 
-  if (c.deployer && !c.receiptsAddress) {
-    const [balance, cost] = await Promise.all([
+  // The balance and the budget are shown from the moment a key exists, so an
+  // admin can see what they are funding before they send anything.
+  if (c.deployer) {
+    const label = c.parentName?.replace(/\.eth$/, '') ?? null
+    const [balance, budget] = await Promise.all([
       chain.balanceOf(c.deployer.address).catch(() => null),
-      chain.estimateDeployCost().catch(() => null),
+      chain.budget(label).catch(() => null),
     ])
     out.balance = balance
-    out.cost = cost
-    // Enough for the deployment itself, with room left to sponsor subnames.
-    out.fundedEnough = Boolean(balance && cost && BigInt(balance.wei) > BigInt(cost.wei) * 2n)
+    out.budget = budget
+
+    if (!c.receiptsAddress && balance && budget) {
+      // Enough for the deployment, with room left over to sponsor users.
+      const needed = BigInt(budget.deploy.wei) * 2n
+      out.fundedEnough = BigInt(balance.wei) > needed
+    }
   }
+
+  if (c.parentName && !c.nameRegistered) {
+    const label = c.parentName.replace(/\.eth$/, '')
+    out.nameAvailable = await chain.ensAvailable(label).catch(() => null)
+  }
+  out.nameRegistered = Boolean(c.nameRegistered)
 
   return out
 }
@@ -108,6 +127,27 @@ export async function generateDeployer() {
   const privateKey = `0x${randomBytes(32).toString('hex')}`
   const account = privateKeyToAccount(privateKey)
   c.deployer = { address: account.address, privateKey }
+  await persist()
+  return status()
+}
+
+/**
+ * Buy the name this server issues subnames under.
+ *
+ * Slow on purpose — the registrar enforces a wait between committing and
+ * revealing — so the request is held open for the better part of two minutes.
+ */
+export async function registerName() {
+  const c = await load()
+  if (!c.parentName) throw new Error('choose a name first')
+  if (!c.deployer) throw new Error('generate a deployer key first')
+  if (c.nameRegistered) throw new Error('already registered')
+
+  const label = c.parentName.replace(/\.eth$/, '')
+  const result = await chain.registerEnsName(c.deployer.privateKey, label)
+
+  c.nameRegistered = true
+  c.nameRegistration = result
   await persist()
   return status()
 }
