@@ -10,6 +10,7 @@
     "bundle:claim": "esbuild web/src/claim.js --bundle --format=esm --outfile=web/claim.bundle.js"
   },
   "dependencies": {
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@ethersphere/bee-js": "^11.1.1",
     "@noble/ciphers": "^1.0.0",
     "@noble/curves": "^1.6.0",
