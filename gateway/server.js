@@ -17,22 +17,50 @@ import * as setup from './setup.js'
 import * as chain from './chain.js'
 import * as circle from './circle.js'
 import * as admin from './admin.js'
+import { rateLimit, requireHexParam } from './limits.js'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT ?? 8788
+// Behind a reverse proxy, bind to loopback so the proxy is the only way in.
+const HOST = process.env.HOST ?? '0.0.0.0'
 
 const app = express()
+
+// Behind Caddy or nginx, the client address arrives in a forwarded header;
+// without this every visitor looks like the proxy and rate limiting is useless.
+app.set('trust proxy', 1)
+
 app.use(express.json({ limit: '64mb' }))
+
 app.use((req, res, next) => {
-  // The extension is a distinct origin, so it needs CORS to reach the gateway.
-  res.set('Access-Control-Allow-Origin', '*')
-  res.set('Access-Control-Allow-Headers', 'Content-Type')
+  // The extension is a distinct origin and must be able to reach the gateway.
+  // Chrome sends chrome-extension:// as the origin; everything else is only
+  // allowed to read, which is what the claim page needs and no more.
+  const origin = req.get('origin')
+  if (origin?.startsWith('chrome-extension://') || origin === undefined) {
+    res.set('Access-Control-Allow-Origin', origin ?? '*')
+  } else {
+    res.set('Access-Control-Allow-Origin', origin)
+    res.set('Vary', 'Origin')
+  }
+  res.set('Access-Control-Allow-Headers', 'Content-Type, x-setup-token, x-admin-session')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
+
+  // Nothing here should ever be framed or sniffed.
+  res.set('X-Content-Type-Options', 'nosniff')
+  res.set('X-Frame-Options', 'DENY')
+  res.set('Referrer-Policy', 'no-referrer')
   next()
 })
+
+// Anything that spends Circle quota, postage or gas is limited; reads are not.
+const limitAuth = rateLimit({ key: 'auth', windowMs: 60_000, max: 20 })
+const limitCircle = rateLimit({ key: 'circle', windowMs: 60_000, max: 20 })
+const limitSend = rateLimit({ key: 'send', windowMs: 60_000, max: 10 })
+const limitSetup = rateLimit({ key: 'setup', windowMs: 60_000, max: 60 })
 
 // ---- admin sign-in ----
 
@@ -41,7 +69,7 @@ app.get('/api/setup/admin', async (_req, res) => {
   res.json({ adminAddress: await setup.adminAddress() })
 })
 
-app.post('/api/setup/admin/nonce', (req, res) => {
+app.post('/api/setup/admin/nonce', limitAuth, (req, res) => {
   const { address } = req.body ?? {}
   if (!address) return res.status(400).json({ error: 'address required' })
   const nonce = admin.issueNonce(address)
@@ -53,7 +81,7 @@ app.post('/api/setup/admin/nonce', (req, res) => {
  * Claiming needs the console token as well, so an unclaimed server on a public
  * address cannot simply be taken by whoever finds it.
  */
-app.post('/api/setup/admin/verify', async (req, res) => {
+app.post('/api/setup/admin/verify', limitAuth, async (req, res) => {
   try {
     const { address, nonce, signature, token } = req.body ?? {}
     const result = await admin.verify({ address, nonce, signature, host: req.get('host') })
@@ -83,7 +111,7 @@ app.post('/api/setup/admin/signout', (req, res) => {
 
 // ---- setup ----
 
-app.get('/api/setup/status', setup.requireSetupToken, async (_req, res) => {
+app.get('/api/setup/status', limitSetup, setup.requireSetupToken, async (_req, res) => {
   try {
     res.json(await setup.status())
   } catch (err) {
@@ -160,7 +188,7 @@ app.get('/api/health', async (_req, res) => {
   })
 })
 
-app.post('/api/nonce', (req, res) => {
+app.post('/api/nonce', limitAuth, (req, res) => {
   const { pubKey } = req.body ?? {}
   if (!pubKey) return res.status(400).json({ error: 'pubKey required' })
   res.json({ nonce: issueNonce(pubKey) })
@@ -172,7 +200,7 @@ app.post('/api/nonce', (req, res) => {
 app.get('/api/circle/config', (_req, res) => res.json(circle.publicConfig()))
 
 /** Trade the browser's device id for tokens the SDK can sign in with. */
-app.post('/api/circle/device-token', async (req, res) => {
+app.post('/api/circle/device-token', limitCircle, async (req, res) => {
   try {
     const { deviceId } = req.body ?? {}
     if (!deviceId) return res.status(400).json({ error: 'deviceId required' })
@@ -183,7 +211,7 @@ app.post('/api/circle/device-token', async (req, res) => {
 })
 
 /** Provision the wallet once Google has returned. */
-app.post('/api/circle/initialize', async (req, res) => {
+app.post('/api/circle/initialize', limitCircle, async (req, res) => {
   try {
     const { userToken } = req.body ?? {}
     if (!userToken) return res.status(400).json({ error: 'userToken required' })
@@ -193,7 +221,7 @@ app.post('/api/circle/initialize', async (req, res) => {
   }
 })
 
-app.post('/api/circle/wallets', async (req, res) => {
+app.post('/api/circle/wallets', limitCircle, async (req, res) => {
   try {
     const { userToken } = req.body ?? {}
     if (!userToken) return res.status(400).json({ error: 'userToken required' })
@@ -223,7 +251,7 @@ app.get('/api/name/available/:label', async (req, res) => {
  * user token proves the wallet is theirs. The wallet address is read back from
  * Circle rather than accepted from the browser — a page could claim any address.
  */
-app.post('/api/name/register', requireSignature, async (req, res) => {
+app.post('/api/name/register', limitSend, requireSignature, async (req, res) => {
   try {
     const { label, userToken } = req.body
 
@@ -258,14 +286,15 @@ app.get('/api/name/reverse/:pubKey', async (req, res) => {
   res.json(record)
 })
 
-app.get('/api/names', async (_req, res) => res.json(await names.list()))
+// Resolution is public by necessity; enumeration of every user is not.
+app.get('/api/names', setup.requireSetupToken, async (_req, res) => res.json(await names.list()))
 
 /**
  * Alice sends. She supplies ciphertext, the hash of the plaintext, and her
  * signature over the transfer digest — the sender half of the proof, committed
  * before Bob ever sees the file.
  */
-app.post('/api/send', requireSignature, async (req, res) => {
+app.post('/api/send', limitSend, requireSignature, async (req, res) => {
   try {
     const { recipientPubKey, plaintextHash, senderSignature, filename, ciphertext } = req.body
     if (!recipientPubKey || !plaintextHash || !senderSignature || !ciphertext) {
@@ -321,7 +350,7 @@ app.post('/api/send', requireSignature, async (req, res) => {
 })
 
 /** Public record. Enough to verify the transfer; not enough to read the file. */
-app.get('/api/transfer/:id', async (req, res) => {
+app.get('/api/transfer/:id', requireHexParam('id', { length: 32 }), async (req, res) => {
   const t = await store.get(req.params.id)
   if (!t) return res.status(404).json({ error: 'no such transfer' })
   res.json({
@@ -344,7 +373,7 @@ app.get('/api/transfer/:id', async (req, res) => {
 })
 
 /** The ciphertext itself. Useless without Bob's private key. */
-app.get('/api/blob/:id', async (req, res) => {
+app.get('/api/blob/:id', requireHexParam('id', { length: 32 }), async (req, res) => {
   const t = await store.get(req.params.id)
   if (!t) return res.status(404).json({ error: 'no such transfer' })
   if (t.expired) return res.status(410).json({ error: 'transfer expired' })
@@ -378,11 +407,12 @@ app.post('/api/claim', requireSignature, async (req, res) => {
   }
 })
 
-app.get('/api/transfers', async (_req, res) => res.json(await store.list()))
+// The whole transfer log, admin only — it names every sender and recipient.
+app.get('/api/transfers', setup.requireSetupToken, async (_req, res) => res.json(await store.list()))
 
 app.use(express.static(path.join(__dirname, '..', 'web')))
 
-app.listen(PORT, async () => {
+app.listen(PORT, HOST, async () => {
   const state = await setup.status()
   names.setParent(state.parentName)
 
