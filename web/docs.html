@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs · PineSign</title>
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<nav id="nav" class="scrolled">
+  <a class="brand" href="/"><img src="assets/pine.png" alt="" /><span>PineSign</span></a>
+  <div class="links">
+    <a href="app.html" class="cta-btn">Get started</a>
+  </div>
+</nav>
+
+<main class="page docs">
+  <div class="inner">
+    <div class="section-pre">Documentation</div>
+    <h2 class="section-title" style="margin-bottom:20px">How PineSign works</h2>
+
+    <div class="toc">
+      <ul>
+        <li><a href="#problem">The problem</a></li>
+        <li><a href="#keys">Two keys, two jobs</a></li>
+        <li><a href="#send">Sending</a></li>
+        <li><a href="#receive">Receiving</a></li>
+        <li><a href="#receipt">What the receipt proves</a></li>
+        <li><a href="#expiry">Expiry</a></li>
+        <li><a href="#selfhost">Run your own</a></li>
+      </ul>
+    </div>
+
+    <h2 id="problem">The problem</h2>
+    <p>
+      Email attachments prove nothing. The sender cannot show what was delivered, the
+      recipient cannot show what arrived, and both parties can plausibly claim the other
+      is lying. Registered post solved this for paper a century ago. PineSign does it for
+      files, without asking anyone to trust the service in the middle.
+    </p>
+
+    <h2 id="keys">Two keys, two jobs</h2>
+    <p>Every user ends up with two distinct keys, which is deliberate.</p>
+    <h3>The wallet key (Circle)</h3>
+    <p>
+      Created when you sign in with Google. It is a multi-party computation wallet: the
+      key is never assembled in one place, not even in your browser, and never on our
+      server. It is your identity — it owns your name and calls the receipt contract. It
+      does no encryption, because an MPC key cannot perform the key agreement encryption
+      needs.
+    </p>
+    <h3>The encryption key (extension)</h3>
+    <p>
+      Generated locally the first time you open the extension, and stored only there. Web
+      pages never receive it; they ask the extension to act and get back a result. This
+      key does the encrypting, the decrypting, and signs for what you send and receive.
+    </p>
+    <p>
+      The name binds them: your wallet owns <code>alice.pinesign.eth</code>, and your
+      extension's public key is published in its records.
+    </p>
+
+    <h2 id="send">Sending</h2>
+    <p>
+      The sender looks up the recipient's name, which returns their encryption public key.
+      Combining the sender's private key with that public key produces a shared secret;
+      the recipient will later compute the identical secret from their own private key and
+      the sender's public key. This is Diffie–Hellman, and it means <strong>no key is ever
+      transmitted</strong> — each side derives it independently.
+    </p>
+    <p>
+      That secret encrypts the file with AES-256-GCM. The ciphertext goes to the gateway,
+      which uploads it to Swarm and pays the storage cost. The gateway never holds a key
+      and never sees a readable byte.
+    </p>
+    <p>
+      Before the file goes anywhere, the sender signs a digest covering their key, the
+      recipient's key and the hash of the plaintext. That signature is the sender's half
+      of the proof, committed before the recipient has seen anything.
+    </p>
+
+    <h2 id="receive">Receiving</h2>
+    <p>
+      The recipient opens a link naming them specifically. Anyone else who opens it is
+      told the file is not theirs, and could not decrypt it regardless. The page fetches
+      the ciphertext and hands it to the extension, which derives the same shared secret,
+      decrypts, and checks the result against the hash the sender committed to.
+    </p>
+    <p>
+      Decryption and signing the receipt are a single operation inside the extension. A
+      page cannot take the file and then decline to sign for it.
+    </p>
+
+    <h2 id="receipt">What the receipt proves</h2>
+    <p>
+      The receipt contract is write-once. It has no owner, no admin key and no upgrade
+      path: it can record that a transfer happened, once, and then cannot be made to say
+      otherwise.
+    </p>
+    <p>
+      There is a subtlety worth stating plainly. A naive design stores the plaintext hash
+      when the file is sent and has the recipient sign it — which proves nothing, because
+      the hash is public and can be signed without ever opening the file. So the contract
+      stores only a <em>commitment</em>: the hash of the plaintext hash. Claiming requires
+      supplying the preimage, which the recipient can only obtain by decrypting.
+    </p>
+    <pre><code>send(recipient, commitment, swarmRef)   // commitment = keccak256(plaintextHash)
+claim(id, plaintextHash)                // reverts unless keccak256(it) == commitment</code></pre>
+    <p>
+      Both parties authenticate by being the caller. The sender calls <code>send</code>,
+      the recipient calls <code>claim</code>; no signature verification is needed on chain
+      because <code>msg.sender</code> already is the signature.
+    </p>
+    <p>
+      What this establishes is <strong>proof of delivery</strong> — the same thing
+      registered post establishes. It does not prove the recipient read or agreed to the
+      contents, and PineSign does not claim it does.
+    </p>
+
+    <h2 id="expiry">Expiry</h2>
+    <p>
+      The stored blob and the name pointing at it lapse on the same clock. If the recipient
+      never accepts, both simply stop existing — no deletion job, no retention promise
+      anyone has to be trusted to keep. If they do accept, the receipt is permanent while
+      the file itself still disappears.
+    </p>
+
+    <h2 id="selfhost">Run your own</h2>
+    <p>
+      PineSign is open source and expects to be self-hosted. A fresh server knows nothing;
+      the setup page walks through choosing a name, generating a deployer wallet, funding
+      it, and deploying the receipt contract.
+    </p>
+    <pre><code>git clone &lt;repo&gt; &amp;&amp; cd pinesign
+npm install &amp;&amp; npm run build
+node gateway/server.js            # prints a setup link with a one-time token</code></pre>
+    <p>
+      The deployer key is generated on your machine, written only to <code>.storage/</code>,
+      and never enters the repository — so every deployment has its own. It pays for the
+      contract and afterwards sponsors each user's subname, which is what lets your users
+      never hold gas or know a chain is involved.
+    </p>
+
+    <div class="cta-block">
+      <p>That is the whole mechanism.</p>
+      <a href="app.html" class="btn-primary">Get started</a>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

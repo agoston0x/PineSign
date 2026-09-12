@@ -8,78 +8,149 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <div class="hero">
-      <img src="assets/pine.png" alt="" />
-      <div>
-        <h1>PineSign</h1>
-        <p class="tagline">Encrypted here. Proven there.</p>
-      </div>
-    </div>
 
-    <p class="lede">
-      Send a file so that both of you can prove it happened. It is encrypted on your
-      machine before it leaves, stored on Swarm only as long as it needs to be, and
-      the record of delivery is <strong>written once and never editable</strong> —
-      not by us, not by you.
-    </p>
+<nav id="nav">
+  <a class="brand" href="/">
+    <img src="assets/pine.png" alt="" />
+    <span>PineSign</span>
+  </a>
+  <div class="links">
+    <a href="docs.html">Docs</a>
+    <a href="app.html" class="cta-btn">Get started</a>
+  </div>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
 
-    <section class="panel">
-      <h2>How a transfer works</h2>
-      <ol class="steps">
-        <li>
-          <div>
-            <h3>Alice encrypts on her own machine</h3>
-            <p>The extension derives a key from her private key and Bob's public one. Nothing readable leaves her computer, and no key is ever transmitted.</p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h3>The gateway pays for the storage</h3>
-            <p>It uploads the ciphertext to Swarm and covers the postage. Bob and Alice never touch a stamp, a token, or a node — and the gateway never sees the file.</p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h3>Bob claims it, or it disappears</h3>
-            <p>He decrypts, and proves he did by revealing something only the plaintext yields. If he never claims, the blob and its link expire together. Nothing to delete.</p>
-          </div>
-        </li>
-      </ol>
-    </section>
+<div id="mobileMenu">
+  <a href="docs.html">Docs</a>
+  <a href="app.html">Get started</a>
+</div>
 
-    <section class="panel">
-      <h2>Your name</h2>
-
-      <div id="no-extension" hidden>
-        <p class="hint">
-          PineSign needs its extension: your key is generated there, and it is the only
-          place that can decrypt what is sent to you. This page never sees it.
+<!-- 1 · HERO -->
+<section class="hero-section">
+  <div class="inner">
+    <div class="hero-grid">
+      <div class="hero-text">
+        <h1>Prove you sent it.<br /><span class="accent">Prove they got it.</span></h1>
+        <p class="lede">
+          Send a file so that both sides can prove it happened. Encrypted on your own
+          machine, stored only as long as it is needed, and the delivery receipt is
+          written once — editable by nobody, including us.
         </p>
-        <p class="hint mono">Load <code>extension/</code> unpacked at chrome://extensions</p>
-      </div>
-
-      <div id="named" hidden>
-        <p class="hint">This is how people address files to you.</p>
-        <code class="key" id="your-name">…</code>
-        <div class="row">
-          <button class="ghost" id="copy-name">Copy name</button>
+        <div class="hero-btns">
+          <a href="app.html" class="btn-primary">Get started</a>
+          <a href="docs.html" class="btn-ghost">Read the docs</a>
         </div>
       </div>
 
-      <div id="unnamed" hidden>
-        <p class="hint">
-          You have a key but no name yet. Open the extension and claim one — until you
-          do, nobody can address a file to you and you cannot send.
-        </p>
+      <div class="use-cases">
+        <div class="uc-head">What people send</div>
+        <ul>
+          <li><span class="uc-icon">◳</span><div><strong>Design files</strong><em>Hand off artwork and prove the client received it.</em></div></li>
+          <li><span class="uc-icon">✎</span><div><strong>Copy and drafts</strong><em>Deliver a manuscript with a timestamp nobody can dispute.</em></div></li>
+          <li><span class="uc-icon">⌗</span><div><strong>Architecture and plans</strong><em>Issue drawings to a contractor, on the record.</em></div></li>
+          <li><span class="uc-icon">‹›</span><div><strong>Source code</strong><em>Transfer a build to a client who paid for it.</em></div></li>
+          <li><span class="uc-icon">◈</span><div><strong>Anything private</strong><em>Contracts, scans, keys — it is opaque to everyone but the recipient.</em></div></li>
+        </ul>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
-    <p class="foot">
-      Built at ETHRome 2026 · Swarm for storage, ENS for the namespace, one write-once contract for the receipt.
+<!-- 2 · HOW IT WORKS -->
+<section id="how">
+  <div class="inner">
+    <div class="section-pre">How it works</div>
+    <h2 class="section-title">Two sides, one record.</h2>
+    <p class="section-sub">
+      Neither side needs a wallet, a token, or to know what Swarm is. They sign in,
+      and the rest is arithmetic.
     </p>
-  </main>
 
-  <script type="module" src="home.bundle.js"></script>
+    <div class="two-col">
+      <div class="col">
+        <div class="col-head sender">The sender</div>
+        <ol class="flow">
+          <li><strong>Sign in</strong><span>Google gives you an account and a wallet whose key only you hold.</span></li>
+          <li><strong>Take a name</strong><span>You become <code>alice.pinesign.eth</code>. Your encryption key is published in its records.</span></li>
+          <li><strong>Pick a file</strong><span>The extension encrypts it on your machine, addressed to the recipient's key.</span></li>
+          <li><strong>Send the link</strong><span>Only ciphertext leaves your computer. You have already signed for what you sent.</span></li>
+        </ol>
+      </div>
+
+      <div class="col">
+        <div class="col-head recipient">The recipient</div>
+        <ol class="flow">
+          <li><strong>Open the link</strong><span>It names you specifically. Anyone else who opens it sees nothing but a refusal.</span></li>
+          <li><strong>Sign in</strong><span>Same two steps: an account, and a name that publishes your key.</span></li>
+          <li><strong>Accept</strong><span>The file decrypts on your machine. Accepting and decrypting are one act.</span></li>
+          <li><strong>The receipt</strong><span>Proof you received it is written once. Neither of you can take it back.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <p class="footnote">
+      If the recipient never accepts, the file and its link expire together. Nothing to
+      delete, nothing left behind.
+    </p>
+  </div>
+</section>
+
+<!-- 3 · UNDER THE HOOD -->
+<section id="under">
+  <div class="inner">
+    <div class="section-pre">Under the hood</div>
+    <h2 class="section-title">Why it holds up.</h2>
+
+    <div class="tech-grid">
+      <div class="tech">
+        <h3>No key is ever sent</h3>
+        <p>The sender's private key and the recipient's public key produce a shared secret; the recipient computes the identical one from the other direction. Nothing secret crosses the wire.</p>
+      </div>
+      <div class="tech">
+        <h3>The gateway is blind</h3>
+        <p>It pays for storage and sees only ciphertext. It cannot read a file, and could not hand one over if compelled.</p>
+      </div>
+      <div class="tech">
+        <h3>Proof of decryption</h3>
+        <p>The receipt requires a value only the decrypted file yields. Claiming without opening the file is not possible.</p>
+      </div>
+      <div class="tech">
+        <h3>Expiry is passive</h3>
+        <p>The stored blob and the name pointing at it lapse on the same clock. Deletion is not a promise anyone has to keep.</p>
+      </div>
+      <div class="tech">
+        <h3>Names do real work</h3>
+        <p>A name is how the sender discovers where to encrypt. No name, no published key, nothing to send to.</p>
+      </div>
+      <div class="tech">
+        <h3>Write once</h3>
+        <p>The receipt contract has no owner and no upgrade path. It records that a transfer happened, once, and then cannot say otherwise.</p>
+      </div>
+    </div>
+
+    <div class="cta-block">
+      <p>The full mechanism, the threat model, and how to run your own server.</p>
+      <a href="docs.html" class="btn-primary">Read the docs</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-foot">
+  <div class="inner">
+    <span>Built at ETHRome 2026</span>
+    <span>Swarm for storage · ENS for names · one write-once contract for the receipt</span>
+  </div>
+</footer>
+
+<script>
+  const nav = document.getElementById('nav')
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 20))
+  document.getElementById('hamburger').addEventListener('click', () =>
+    document.getElementById('mobileMenu').classList.toggle('open'))
+</script>
+
 </body>
 </html>

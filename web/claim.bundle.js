@@ -397,13 +397,13 @@ window.addEventListener("message", (event) => {
     ready = true;
   }
 });
-function request(type, payload) {
+function request(type, payload, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const timer = setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error("the extension did not respond"));
-    }, TIMEOUT_MS);
+    }, timeoutMs);
     function onMessage(event) {
       if (event.source !== window) return;
       const msg = event.data;
@@ -422,7 +422,7 @@ async function extensionPresent() {
   await new Promise((r) => setTimeout(r, 300));
   if (ready) return true;
   try {
-    await request("identity", {});
+    await request("identity", {}, 1500);
     return true;
   } catch {
     return false;

@@ -319,6 +319,9 @@ var sha2562 = sha256;
 
 // shared/crypto.js
 var INFO = new TextEncoder().encode("pinesign/v1");
+function toHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // shared/client.js
 var Gateway = class {
@@ -372,8 +375,8 @@ var Gateway = class {
     });
   }
   /** Name to key — how a sender finds out where to encrypt. */
-  resolveName(name) {
-    return this.#json(`/api/name/resolve/${encodeURIComponent(name)}`);
+  resolveName(name2) {
+    return this.#json(`/api/name/resolve/${encodeURIComponent(name2)}`);
   }
   /** Key to name, for showing a person rather than a hex string. */
   async reverseName(pubKey) {
@@ -394,13 +397,13 @@ window.addEventListener("message", (event) => {
     ready = true;
   }
 });
-function request(type, payload) {
+function request(type, payload, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const timer = setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error("the extension did not respond"));
-    }, TIMEOUT_MS);
+    }, timeoutMs);
     function onMessage(event) {
       if (event.source !== window) return;
       const msg = event.data;
@@ -419,7 +422,7 @@ async function extensionPresent() {
   await new Promise((r) => setTimeout(r, 300));
   if (ready) return true;
   try {
-    await request("identity", {});
+    await request("identity", {}, 1500);
     return true;
   } catch {
     return false;
@@ -428,30 +431,237 @@ async function extensionPresent() {
 function getIdentity() {
   return request("identity", {});
 }
+async function bridgeSigner() {
+  const identity2 = await getIdentity();
+  return {
+    publicKeyHex: identity2.publicKey,
+    address: identity2.address,
+    async signDigest(digest) {
+      const { signature } = await request("signDigest", { digest: toHex(digest) });
+      return signature;
+    }
+  };
+}
 
-// web/src/home.js
+// web/src/signup.js
+import { W3SSdk } from "https://cdn.jsdelivr.net/npm/@circle-fin/w3s-pw-web-sdk@1.1.11/+esm";
+var STORE = "pinesign.circle";
+var GOOGLE = "Google";
+var REDIRECT_URI = `${window.location.origin}/app.html`;
+var sdk = null;
+var config = null;
+var session = load();
+function load() {
+  try {
+    return JSON.parse(localStorage.getItem(STORE) ?? "null");
+  } catch {
+    return null;
+  }
+}
+function save(patch) {
+  session = { ...session ?? {}, ...patch };
+  localStorage.setItem(STORE, JSON.stringify(session));
+  return session;
+}
+function currentWallet() {
+  return session?.wallet ?? null;
+}
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? res.statusText);
+  return json;
+}
+async function finishSignIn({ userToken, encryptionKey }, onStep) {
+  save({ userToken, encryptionKey });
+  onStep?.("Creating your wallet\u2026");
+  const init = await api("/api/circle/initialize", { userToken });
+  if (init.challengeId) {
+    onStep?.("Confirm in the Circle window\u2026");
+    sdk.setAuthentication({ userToken, encryptionKey });
+    await new Promise((resolve, reject) => {
+      sdk.execute(init.challengeId, (error) => error ? reject(new Error(error.message)) : resolve());
+    });
+  }
+  onStep?.("Reading your wallet\u2026");
+  const { wallets } = await api("/api/circle/wallets", { userToken });
+  const wallet2 = wallets?.[0];
+  if (!wallet2) throw new Error("Circle created no wallet for this account");
+  save({ wallet: { id: wallet2.id, address: wallet2.address, blockchain: wallet2.blockchain } });
+  return wallet2;
+}
+async function initSignIn({ onStep, onWallet, onError }) {
+  config = await (await fetch("/api/circle/config")).json();
+  if (!config.configured) return { configured: false };
+  sdk = new W3SSdk({ appSettings: { appId: config.appId } }, async (error, result) => {
+    if (error) return onError?.(new Error(error.message));
+    if (!result) return;
+    try {
+      onWallet?.(await finishSignIn(result, onStep));
+    } catch (err) {
+      onError?.(err);
+    }
+  });
+  if (session?.deviceToken) {
+    sdk.updateConfigs({
+      appSettings: { appId: config.appId },
+      loginConfigs: {
+        deviceToken: session.deviceToken,
+        deviceEncryptionKey: session.deviceEncryptionKey,
+        google: { clientId: config.googleClientId, redirectUri: REDIRECT_URI }
+      }
+    });
+  }
+  return { configured: true, wallet: currentWallet() };
+}
+async function signInWithGoogle(onStep) {
+  if (!sdk) throw new Error("the Circle SDK never initialised \u2014 check the console for why");
+  onStep?.("Preparing\u2026");
+  const deviceId = await sdk.getDeviceId();
+  const { deviceToken, deviceEncryptionKey } = await api("/api/circle/device-token", { deviceId });
+  save({ deviceToken, deviceEncryptionKey });
+  sdk.updateConfigs({
+    appSettings: { appId: config.appId },
+    loginConfigs: {
+      deviceToken,
+      deviceEncryptionKey,
+      google: {
+        clientId: config.googleClientId,
+        redirectUri: REDIRECT_URI,
+        selectAccountPrompt: true
+      }
+    }
+  });
+  onStep?.("Redirecting to Google\u2026");
+  await sdk.performLogin(GOOGLE);
+}
+
+// web/src/app.js
 var el = (id) => document.getElementById(id);
 var gateway = new Gateway(location.origin);
-async function show() {
-  if (!await extensionPresent()) {
-    el("no-extension").hidden = false;
-    return;
-  }
-  const identity = await getIdentity();
-  const named = await gateway.reverseName(identity.publicKey);
-  if (named) {
-    el("your-name").textContent = named.name;
-    el("named").hidden = false;
-  } else {
-    el("unnamed").hidden = false;
-  }
-  el("copy-name").addEventListener("click", () => {
-    navigator.clipboard.writeText(el("your-name").textContent);
-    el("copy-name").textContent = "Copied";
-    setTimeout(() => el("copy-name").textContent = "Copy name", 1200);
-  });
+var identity = null;
+var wallet = null;
+var name = null;
+function mark(step, state) {
+  el(step).className = state;
 }
-show();
+function status(node, message, kind = "") {
+  el(node).textContent = message;
+  el(node).className = `status ${kind}`.trim();
+}
+function renderAccount() {
+  if (!wallet) return mark("s-account", "todo");
+  el("wallet").textContent = wallet.address;
+  el("wallet").hidden = false;
+  el("signin").hidden = true;
+  el("account-hint").textContent = "Your wallet. It owns your name and signs for the files you receive.";
+  mark("s-account", "done");
+}
+function renderExtension() {
+  if (!identity) return mark("s-extension", "todo");
+  el("enc-key").textContent = identity.publicKey;
+  el("enc-key").hidden = false;
+  el("extension-install").hidden = true;
+  el("extension-hint").textContent = "Installed. This is the key that will decrypt files sent to you.";
+  mark("s-extension", "done");
+}
+function renderName() {
+  if (name) {
+    el("your-name").textContent = name.name;
+    el("your-name").hidden = false;
+    el("claim-form").hidden = true;
+    el("name-actions").hidden = false;
+    return mark("s-name", "done");
+  }
+  const ready2 = Boolean(identity && wallet);
+  el("claim-form").hidden = false;
+  if (!ready2) {
+    status("name-status", identity ? "Sign in first." : "Install the extension first.");
+  } else {
+    status("name-status", "");
+  }
+  mark("s-name", ready2 ? "todo" : "blocked");
+}
+async function refreshName() {
+  name = identity ? await gateway.reverseName(identity.publicKey) : null;
+  renderName();
+}
+el("label").addEventListener("input", () => {
+  const label = el("label").value.trim().toLowerCase();
+  el("claim").disabled = !(identity && wallet && /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(label));
+});
+el("claim").addEventListener("click", async () => {
+  el("claim").disabled = true;
+  status("name-status", "Claiming\u2026");
+  try {
+    const signer = await bridgeSigner();
+    signer.address = wallet.address;
+    name = await gateway.registerName(signer, el("label").value.trim().toLowerCase());
+    status("name-status", "");
+    renderName();
+  } catch (err) {
+    status("name-status", err.message, "error");
+    el("claim").disabled = false;
+  }
+});
+el("copy-name").addEventListener("click", () => {
+  navigator.clipboard.writeText(name.name);
+  el("copy-name").textContent = "Copied";
+  setTimeout(() => el("copy-name").textContent = "Copy name", 1200);
+});
+el("signin").addEventListener("click", async () => {
+  console.log("[pinesign] sign-in clicked");
+  el("signin").disabled = true;
+  status("signin-status", "Starting\u2026");
+  try {
+    await signInWithGoogle((m) => {
+      console.log("[pinesign]", m);
+      status("signin-status", m);
+    });
+  } catch (err) {
+    console.error("[pinesign] sign-in failed", err);
+    status("signin-status", err.message, "error");
+    el("signin").disabled = false;
+  }
+});
+async function boot() {
+  el("signin").disabled = true;
+  const circleReady = initSignIn({
+    onStep: (m) => status("signin-status", m),
+    onWallet: (w) => {
+      wallet = w;
+      status("signin-status", "");
+      renderAccount();
+      renderName();
+    },
+    onError: (err) => status("signin-status", err.message, "error")
+  });
+  const [health, hasExtension, circle] = await Promise.all([
+    gateway.health().catch(() => null),
+    extensionPresent(),
+    circleReady
+  ]);
+  if (health?.parentName) el("suffix").textContent = `.${health.parentName}`;
+  if (hasExtension) identity = await getIdentity();
+  renderExtension();
+  if (!circle.configured) {
+    el("account-hint").textContent = "This server has no Circle credentials configured.";
+    mark("s-account", "blocked");
+  } else {
+    el("signin").disabled = false;
+    wallet = circle.wallet ?? currentWallet();
+    renderAccount();
+  }
+  await refreshName();
+}
+boot().catch((err) => {
+  console.error("[pinesign] boot failed", err);
+  status("signin-status", `Could not start: ${err.message}`, "error");
+});
 /*! Bundled license information:
 
 @noble/hashes/esm/utils.js:

@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "gateway": "node gateway/server.js",
-    "bundle": "npm run bundle:ext && npm run bundle:claim",
-    "bundle:ext": "esbuild extension/src/popup.js --bundle --format=esm --outfile=extension/lib/popup.bundle.js",
-    "bundle:claim": "esbuild web/src/claim.js --bundle --format=esm --outfile=web/claim.bundle.js"
+    "build": "node build.mjs"
   },
   "dependencies": {
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",

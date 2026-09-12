@@ -17,14 +17,14 @@ window.addEventListener('message', (event) => {
   }
 })
 
-function request(type, payload) {
+function request(type, payload, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID()
 
     const timer = setTimeout(() => {
       window.removeEventListener('message', onMessage)
       reject(new Error('the extension did not respond'))
-    }, TIMEOUT_MS)
+    }, timeoutMs)
 
     function onMessage(event) {
       if (event.source !== window) return
@@ -42,14 +42,20 @@ function request(type, payload) {
   })
 }
 
-/** Is the extension installed on this page? Give it a moment to announce itself. */
+/**
+ * Is the extension installed on this page?
+ *
+ * Kept deliberately brief. A missing extension is the common case, and nothing
+ * else on the page should wait on discovering that — this used to fall through
+ * to the full request timeout and stall startup for twenty seconds.
+ */
 export async function extensionPresent() {
   if (ready) return true
   await new Promise((r) => setTimeout(r, 300))
   if (ready) return true
   // The content script may have loaded before this listener did, so ask directly.
   try {
-    await request('identity', {})
+    await request('identity', {}, 1500)
     return true
   } catch {
     return false

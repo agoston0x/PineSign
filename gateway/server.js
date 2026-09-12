@@ -6,6 +6,7 @@
  * key it does not have and cannot derive.
  */
 
+import './env.js' // must be first: fills process.env for every import below
 import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +15,7 @@ import * as store from './store.js'
 import * as names from './names.js'
 import * as setup from './setup.js'
 import * as chain from './chain.js'
+import * as circle from './circle.js'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
@@ -91,6 +93,43 @@ app.post('/api/nonce', (req, res) => {
   const { pubKey } = req.body ?? {}
   if (!pubKey) return res.status(400).json({ error: 'pubKey required' })
   res.json({ nonce: issueNonce(pubKey) })
+})
+
+// ---- circle wallets ----
+
+/** Public ids the sign-in flow needs. Never the API key. */
+app.get('/api/circle/config', (_req, res) => res.json(circle.publicConfig()))
+
+/** Trade the browser's device id for tokens the SDK can sign in with. */
+app.post('/api/circle/device-token', async (req, res) => {
+  try {
+    const { deviceId } = req.body ?? {}
+    if (!deviceId) return res.status(400).json({ error: 'deviceId required' })
+    res.json(await circle.createDeviceToken(deviceId))
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
+/** Provision the wallet once Google has returned. */
+app.post('/api/circle/initialize', async (req, res) => {
+  try {
+    const { userToken } = req.body ?? {}
+    if (!userToken) return res.status(400).json({ error: 'userToken required' })
+    res.json(await circle.initializeUser(userToken))
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.post('/api/circle/wallets', async (req, res) => {
+  try {
+    const { userToken } = req.body ?? {}
+    if (!userToken) return res.status(400).json({ error: 'userToken required' })
+    res.json(await circle.listWallets(userToken))
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
 })
 
 // ---- names ----
