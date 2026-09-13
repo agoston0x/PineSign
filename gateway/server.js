@@ -44,7 +44,7 @@ function tidy(err) {
   return line.length > 300 ? line.slice(0, 300) + '…' : line
 }
 
-/** Public origin for links in emails, e.g. https://pinesign.claws.page. */
+/** Public origin for links in emails — PUBLIC_ORIGIN, e.g. https://your.domain. */
 function publicOrigin(req) {
   return process.env.PUBLIC_ORIGIN ?? `${req.protocol}://${req.get('host')}`
 }
