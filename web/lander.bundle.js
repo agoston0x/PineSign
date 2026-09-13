@@ -498,9 +498,15 @@ async function finishSignIn({ userToken, encryptionKey }, onStep) {
     });
   }
   onStep?.("Reading your wallet\u2026");
-  const { wallets } = await api("/api/circle/wallets", { userToken });
-  const wallet2 = wallets?.[0];
-  if (!wallet2) throw new Error("Circle created no wallet for this account");
+  let wallet2 = null;
+  for (let attempt = 0; attempt < 10 && !wallet2; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1500));
+    const { wallets } = await api("/api/circle/wallets", { userToken });
+    wallet2 = wallets?.[0] ?? null;
+  }
+  if (!wallet2) {
+    throw new Error("Circle has not created a wallet yet \u2014 did you complete the confirmation window? Try signing in again.");
+  }
   save({ wallet: { id: wallet2.id, address: wallet2.address, blockchain: wallet2.blockchain } });
   return wallet2;
 }

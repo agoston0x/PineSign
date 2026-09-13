@@ -90,10 +90,18 @@ async function finishSignIn({ userToken, encryptionKey }, onStep) {
     })
   }
 
+  // Circle provisions the wallet after the challenge completes, not during it,
+  // so the first read often lands before it exists. Ask a few times.
   onStep?.('Reading your wallet…')
-  const { wallets } = await api('/api/circle/wallets', { userToken })
-  const wallet = wallets?.[0]
-  if (!wallet) throw new Error('Circle created no wallet for this account')
+  let wallet = null
+  for (let attempt = 0; attempt < 10 && !wallet; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1500))
+    const { wallets } = await api('/api/circle/wallets', { userToken })
+    wallet = wallets?.[0] ?? null
+  }
+  if (!wallet) {
+    throw new Error('Circle has not created a wallet yet — did you complete the confirmation window? Try signing in again.')
+  }
 
   save({ wallet: { id: wallet.id, address: wallet.address, blockchain: wallet.blockchain } })
   return wallet
