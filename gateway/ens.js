@@ -155,11 +155,53 @@ export async function register(privateKey, label, { years = 1, onStep } = {}) {
   const receipt = await publicClient.waitForTransactionReceipt({ hash: registerHash })
   if (receipt.status !== 'success') throw new Error('the registration transaction reverted')
 
+  // The registry mints the name as an ERC-1155 token. Its id is what a later
+  // transfer needs, so it is read from the mint event and kept with the record.
+  const tokenId = tokenIdFromReceipt(receipt)
+
   return {
     name: `${label}.eth`,
     owner: account.address,
+    tokenId: tokenId?.toString() ?? null,
+    registry: await read('ETH_REGISTRY'),
     commitTx: commitHash,
     registerTx: registerHash,
     paid: `${price.formatted} ${price.symbol}`,
   }
+}
+
+const TRANSFER_SINGLE = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62'
+
+function tokenIdFromReceipt(receipt) {
+  // TransferSingle(operator, from, to, id, value): id is the first data word.
+  const log = receipt.logs.find((l) => l.topics[0] === TRANSFER_SINGLE)
+  return log ? BigInt(`0x${log.data.slice(2, 66)}`) : null
+}
+
+/**
+ * Move a name to another address.
+ *
+ * The escape hatch: if the server has to be abandoned, the name goes with the
+ * operator rather than with the box. Requires the wallet that owns it.
+ */
+export async function transferName(privateKey, { registry, tokenId, to }) {
+  const account = privateKeyToAccount(privateKey)
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(RPC_URL) })
+  const abi = parseAbi([
+    'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data)',
+    'function ownerOf(uint256 id) view returns (address)',
+  ])
+
+  const owner = await publicClient.readContract({ address: registry, abi, functionName: 'ownerOf', args: [BigInt(tokenId)] })
+  if (owner.toLowerCase() !== account.address.toLowerCase()) {
+    throw new Error(`this wallet does not own the name (owner is ${owner})`)
+  }
+
+  const hash = await wallet.writeContract({
+    address: registry, abi, functionName: 'safeTransferFrom',
+    args: [account.address, to, BigInt(tokenId), 1n, '0x'],
+  })
+  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  if (receipt.status !== 'success') throw new Error('the transfer reverted')
+  return { tx: hash, to }
 }
