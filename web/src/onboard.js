@@ -153,6 +153,30 @@ async function refreshInvites() {
   }
 }
 
+/**
+ * Look the name up by key first; failing that, by wallet — so a name claimed
+ * under an earlier key (before the extension was installed) is still found
+ * and can be moved, rather than hidden behind a claim form.
+ */
+async function refreshName() {
+  name = identity ? await gateway.reverseName(identity.publicKey) : null
+  if (!name && wallet) name = await gateway.nameByAddress(wallet.address)
+  renderName()
+}
+
+el('rebind-btn').addEventListener('click', async () => {
+  el('rebind-btn').disabled = true
+  status('name-status', 'Moving the name to this key…')
+  try {
+    name = await gateway.registerName(await getSigner(), name.label, sessionToken())
+    status('name-status', 'Done — the extension can send as this name now.', 'done')
+    renderName()
+  } catch (err) {
+    status('name-status', err.message, 'error')
+    el('rebind-btn').disabled = false
+  }
+})
+
 // ---- availability ----
 
 let checkTimer = null
