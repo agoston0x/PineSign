@@ -67,8 +67,8 @@ export class Gateway {
     return new Uint8Array(await res.arrayBuffer())
   }
 
-  async claim(signer, id, claimSignature) {
-    return this.#post('/api/claim', { ...(await this.#auth(signer)), id, claimSignature })
+  async claim(signer, id, claimSignature, plaintextHash) {
+    return this.#post('/api/claim', { ...(await this.#auth(signer)), id, claimSignature, plaintextHash })
   }
 
   // ---- names ----

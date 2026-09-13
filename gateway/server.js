@@ -476,9 +476,12 @@ app.get('/api/transfer/:id', requireHexParam('id', { length: 32 }), async (req, 
     senderName: t.senderName ?? null,
     recipientPubKey: t.recipientPubKey,
     recipientName: t.recipientName ?? null,
-    plaintextHash: t.plaintextHash,
+    // The hash is what the recipient must produce to claim. Publishing it up
+    // front would let anyone sign a receipt without ever opening the file, so
+    // before the claim only its commitment is visible.
+    fileCommitment: keccak256(fromHex(t.plaintextHash)),
+    plaintextHash: t.claim ? t.plaintextHash : null,
     senderSignature: t.senderSignature,
-    digest: t.digest,
     filename: t.filename,
     size: t.size,
     reference: t.reference,
@@ -510,11 +513,18 @@ app.get('/api/blob/:id', requireHexParam('id', { length: 32 }), async (req, res)
  */
 app.post('/api/claim', requireSignature, async (req, res) => {
   try {
-    const { id, claimSignature } = req.body
+    const { id, claimSignature, plaintextHash } = req.body
     const t = await store.get(id)
     if (!t) return res.status(404).json({ error: 'no such transfer' })
     if (req.pubKey !== t.recipientPubKey) {
       return res.status(403).json({ error: 'only the named recipient can claim' })
+    }
+
+    // Proof of decryption. The hash was never published — only its commitment —
+    // so the recipient can have it only by decrypting the file. Presenting it
+    // is what turns "downloaded" into "received".
+    if (!plaintextHash || plaintextHash.toLowerCase() !== t.plaintextHash.toLowerCase()) {
+      return res.status(400).json({ error: 'the file hash does not match — decrypt the file to claim it' })
     }
     if (!verify(fromHex(claimSignature), fromHex(t.digest), fromHex(req.pubKey))) {
       return res.status(400).json({ error: 'claim signature does not match the transfer' })

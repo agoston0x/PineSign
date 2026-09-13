@@ -100,6 +100,11 @@ export function hashPlaintext(plaintext) {
   return keccak_256(plaintext)
 }
 
+/** keccak of bytes, as 0x-hex — the form a commitment is published in. */
+export function keccak256(bytes) {
+  return '0x' + toHex(keccak_256(bytes))
+}
+
 export function sign(digest, privateKey) {
   const sig = secp256k1.sign(digest, privateKey)
   return sig.toCompactRawBytes()

@@ -109,11 +109,13 @@ el('accept').addEventListener('click', async () => {
     const opened = await openTransfer({
       ciphertext: Array.from(blob),
       senderPubKey: transfer.senderPubKey,
-      expectedHash: transfer.plaintextHash,
+      expectedCommitment: transfer.fileCommitment,
     })
 
+    // The hash we just derived is the proof: nobody had it before this moment
+    // except the sender. Presenting it is what makes the receipt mean "opened".
     say('Recording the receipt…')
-    const { claim } = await gateway.claim(await signer(), id, opened.signature)
+    const { claim } = await gateway.claim(await signer(), id, opened.signature, opened.plaintextHash)
 
     const bytes = Uint8Array.from(opened.plaintext)
     const url = URL.createObjectURL(new Blob([bytes]))

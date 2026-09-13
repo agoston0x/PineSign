@@ -4,6 +4,29 @@ Verifiable file transfer. Encrypted on your machine, stored on Swarm, attested o
 
 Built at ETHRome 2026. Live at https://pinesign.claws.page
 
+## The claim
+
+**If someone opens a file you sent through PineSign, you get proof they did — on chain,
+within seconds, verifiable by anyone, and impossible for either of you to fake or undo.**
+
+What makes it hold:
+
+1. **The recipient cannot claim without decrypting.** The sender publishes only a
+   *commitment* to the file hash, `keccak(hash)`. To claim, the recipient must present the
+   hash itself — and the only way to have it is to decrypt the file. Downloading the
+   ciphertext is not enough; signing something is not enough.
+2. **The recipient cannot deny it.** The claim carries their signature over the transfer
+   (both keys, the hash). Only their private key produces it.
+3. **The sender cannot forge it.** Without the recipient's signature there is no receipt.
+   The sender's own signature was written at send time, before the recipient saw anything.
+4. **The server cannot alter it.** The record is frozen on delivery. The resolver has no
+   function to unfreeze, and no owner who could add one.
+5. **Anyone can check it** by reading the resolver that ENS itself returns for the name —
+   no PineSign server in the loop. See *Verify a transfer yourself*.
+
+What it does **not** prove: that the recipient *read* or *agreed to* the contents. This is
+proof of delivery, in the sense registered mail is — nothing more, and nothing less.
+
 ## What it does
 
 Alice invites Bob by email. Bob signs in with Google (Circle creates his wallet) and
@@ -33,6 +56,12 @@ cast call $RESOLVER "frozen(bytes32)(bool)"        $NODE                 --rpc-u
 
 Keys: `sender`, `sender.key`, `sender.sig`, `recipient`, `recipient.key`, `file.name`,
 `file.commitment`, `file.hash`, `swarm`, `sent`, `recipient.sig`, `delivered`.
+
+To *verify* rather than just read: rebuild the digest — `keccak("pinesign/v1" ‖ sender.key
+‖ recipient.key ‖ file.hash)` — and check `recipient.sig` against `recipient.key` with
+secp256k1 (see `transferDigest` and `verify` in `shared/crypto.js`). A valid signature
+over a digest containing `file.hash` proves the recipient possessed the hash, which they
+could only get by decrypting.
 
 The resolver is what the ENSv2 registry returns for `pinesign.eth`
 (`getResolver("pinesign")` on `0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2`), so the

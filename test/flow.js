@@ -94,6 +94,8 @@ const record = await (await fetch(`${BASE}/api/transfer/${id}`)).json()
 check('record names the recipient', record.recipientPubKey === bobPub)
 check('record carries both names', record.senderName === aliceName.body.name && record.recipientName === bobName.body.name)
 check('record carries no plaintext', !JSON.stringify(record).includes('quiet part'))
+check('record does not publish the signable digest', record.digest === undefined)
+check('hash is hidden before the claim', record.plaintextHash === null && Boolean(record.fileCommitment))
 
 const blob = new Uint8Array(await (await fetch(`${BASE}/api/blob/${id}`)).arrayBuffer())
 check('stored blob is not the plaintext', !Buffer.from(blob).toString().includes('quiet part'))
@@ -101,7 +103,7 @@ check('stored blob is not the plaintext', !Buffer.from(blob).toString().includes
 const sharedBob = deriveSharedKey(bobPriv, fromHex(record.senderPubKey))
 const recovered = decrypt(blob, sharedBob)
 check('bob decrypts to the original', Buffer.from(recovered).equals(Buffer.from(plaintext)))
-check('hash matches the commitment', toHex(hashPlaintext(recovered)) === record.plaintextHash)
+check('decrypted hash matches the published commitment', '0x' + toHex(hashPlaintext(fromHex(toHex(hashPlaintext(recovered))))) === record.fileCommitment)
 
 console.log('\neve')
 let eveFailed = false
@@ -116,18 +118,23 @@ check('a third party cannot decrypt', eveFailed)
 const eveClaim = await post('/api/claim', {
   ...(await auth(evePriv, evePub)),
   id,
-  claimSignature: toHex(sign(fromHex(record.digest), evePriv)),
+  claimSignature: toHex(sign(sha256(new TextEncoder().encode('guess')), evePriv)),
+  plaintextHash,
 })
 check('a third party cannot claim', eveClaim.status === 403)
 
 console.log('\nclaim')
 const claimSig = toHex(sign(transferDigest({
-  senderPubKey: record.senderPubKey, recipientPubKey: bobPub, plaintextHash: record.plaintextHash,
+  senderPubKey: record.senderPubKey, recipientPubKey: bobPub, plaintextHash: toHex(hashPlaintext(recovered)),
 }), bobPriv))
-const claimed = await post('/api/claim', { ...(await auth(bobPriv, bobPub)), id, claimSignature: claimSig })
-check('bob claims successfully', claimed.status === 200 && claimed.body.claim)
+// Signing alone is not enough: the hash must be presented, and only decrypting yields it.
+const lazy = await post('/api/claim', { ...(await auth(bobPriv, bobPub)), id, claimSignature: claimSig })
+check('a claim without the file hash is refused', lazy.status === 400)
 
-const again = await post('/api/claim', { ...(await auth(bobPriv, bobPub)), id, claimSignature: claimSig })
+const claimed = await post('/api/claim', { ...(await auth(bobPriv, bobPub)), id, claimSignature: claimSig, plaintextHash })
+check('bob claims by presenting the decrypted hash', claimed.status === 200 && claimed.body.claim)
+
+const again = await post('/api/claim', { ...(await auth(bobPriv, bobPub)), id, claimSignature: claimSig, plaintextHash })
 check('a claim is write-once', again.status === 400 && /already claimed/.test(again.body.error))
 
 const final = await (await fetch(`${BASE}/api/transfer/${id}`)).json()

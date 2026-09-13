@@ -15,6 +15,7 @@ import {
   sign,
   toHex,
   fromHex,
+  keccak256,
 } from '../../shared/crypto.js'
 import { getOrCreateIdentity } from '../../shared/identity.js'
 
@@ -33,13 +34,15 @@ const handlers = {
    * come back for the signature would let it take the file and skip the receipt.
    * Here, decrypting and attesting are the same operation.
    */
-  async openTransfer({ ciphertext, senderPubKey, expectedHash }) {
+  async openTransfer({ ciphertext, senderPubKey, expectedCommitment }) {
     const id = await getOrCreateIdentity()
     const sharedKey = deriveSharedKey(id.privateKey, fromHex(senderPubKey))
     const plaintext = decrypt(Uint8Array.from(ciphertext), sharedKey)
 
     const hash = toHex(hashPlaintext(plaintext))
-    if (expectedHash && hash !== expectedHash) {
+    // The sender committed to keccak(hash), not to the hash itself — so the
+    // check is against the commitment, and the hash stays ours to reveal.
+    if (expectedCommitment && keccak256(fromHex(hash)) !== expectedCommitment.toLowerCase()) {
       throw new Error('the decrypted file does not match what the sender committed to')
     }
 

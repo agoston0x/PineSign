@@ -17,7 +17,7 @@ import * as bridge from './bridge.js'
 import { getOrCreateIdentity } from './identity.js'
 import { localSigner } from './client.js'
 import {
-  deriveSharedKey, encrypt, decrypt, hashPlaintext, transferDigest, sign, toHex, fromHex,
+  deriveSharedKey, encrypt, decrypt, hashPlaintext, transferDigest, sign, toHex, fromHex, keccak256,
 } from './crypto.js'
 
 let mode = null
@@ -41,9 +41,9 @@ export async function signer() {
 }
 
 /** Decrypt a transfer and sign its receipt — one step, whichever key is used. */
-export async function openTransfer({ ciphertext, senderPubKey, expectedHash }) {
+export async function openTransfer({ ciphertext, senderPubKey, expectedCommitment }) {
   if ((await keyMode()) === 'extension') {
-    return bridge.openTransfer({ ciphertext: Array.from(ciphertext), senderPubKey, expectedHash })
+    return bridge.openTransfer({ ciphertext: Array.from(ciphertext), senderPubKey, expectedCommitment })
   }
 
   const id = await getOrCreateIdentity()
@@ -51,7 +51,9 @@ export async function openTransfer({ ciphertext, senderPubKey, expectedHash }) {
   const plaintext = decrypt(Uint8Array.from(ciphertext), sharedKey)
 
   const hash = toHex(hashPlaintext(plaintext))
-  if (expectedHash && hash !== expectedHash) {
+  // The sender committed to keccak(hash), not to the hash itself — so the
+  // check is against the commitment, and the hash stays ours to reveal.
+  if (expectedCommitment && keccak256(fromHex(hash)) !== expectedCommitment.toLowerCase()) {
     throw new Error('the decrypted file does not match what the sender committed to')
   }
 
