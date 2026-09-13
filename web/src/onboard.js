@@ -267,10 +267,9 @@ async function boot() {
     renderAccount()
   }
 
-  if (identity) {
-    name = await gateway.reverseName(identity.publicKey)
-  }
-  renderName()
+  // By key, then by wallet — so a name claimed under an earlier key is still
+  // found and offered for rebinding rather than hidden behind a claim form.
+  await refreshName()
 }
 
 /**
