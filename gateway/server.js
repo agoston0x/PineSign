@@ -20,6 +20,8 @@ import * as admin from './admin.js'
 import { rateLimit, requireHexParam } from './limits.js'
 import * as invites from './invites.js'
 import * as mail from './mail.js'
+import * as ens from './ens.js'
+import { keccak256, toHex as viemHex } from 'viem'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
@@ -160,6 +162,14 @@ app.post('/api/setup/register-name', setup.requireSetupToken, async (req, res) =
   res.setTimeout(300000)
   try {
     res.json(await setup.registerName())
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/setup/resolver', setup.requireSetupToken, async (_req, res) => {
+  try {
+    res.json(await setup.attachResolver())
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
@@ -406,6 +416,22 @@ app.post('/api/send', limitSend, requireSignature, async (req, res) => {
 
     const claimUrl = `${publicOrigin(req)}/claim.html?id=${id}`
 
+    // The sender's half of the attestation, on chain, under a name that will
+    // resolve for as long as the parent does. The plaintext hash is committed
+    // to, not published — the recipient reveals it when they claim, which is
+    // what proves they decrypted rather than merely downloaded.
+    attest(id, {
+      'sender': senderName.name,
+      'sender.key': req.pubKey,
+      'sender.sig': senderSignature,
+      'recipient': recipientName?.name ?? '',
+      'recipient.key': recipientPubKey,
+      'file.name': filename ?? 'file',
+      'file.commitment': keccak256(fromHex(plaintextHash)),
+      'swarm': reference,
+      'sent': new Date().toISOString(),
+    }).catch((err) => console.log(`  attestation failed: ${err.message}`))
+
     const recipientEmail = await invites.emailFor(recipientPubKey)
     if (recipientEmail) {
       mail.fileReady({
@@ -444,6 +470,7 @@ app.get('/api/transfer/:id', requireHexParam('id', { length: 32 }), async (req, 
     expired: Boolean(t.expired),
     requireExtension: Boolean(t.requireExtension),
     claim: t.claim,
+    attestation: `${t.id}.tx.${names.getParent()}`,
   })
 })
 
@@ -477,6 +504,13 @@ app.post('/api/claim', requireSignature, async (req, res) => {
     }
     const updated = await store.recordClaim(id, { recipientSignature: claimSignature })
 
+    // The recipient's half, and the freeze: from here the record is final.
+    finalizeAttestation(id, {
+      'file.hash': t.plaintextHash,
+      'recipient.sig': claimSignature,
+      'delivered': new Date().toISOString(),
+    }).catch((err) => console.log(`  attestation finalize failed: ${err.message}`))
+
     const senderEmail = await invites.senderEmailFor(t.senderPubKey)
     if (senderEmail) {
       mail.delivered({
@@ -494,6 +528,68 @@ app.post('/api/claim', requireSignature, async (req, res) => {
 })
 
 // The whole transfer log, admin only — it names every sender and recipient.
+/** The on-chain name a transfer's attestation lives under. */
+async function attestationName(id) {
+  const parent = names.getParent()
+  return `${id}.tx.${parent}`
+}
+
+/**
+ * On-chain writes for one transfer happen strictly in order. A claim can arrive
+ * seconds after a send, and the freeze must not overtake the record it seals —
+ * nor may two transactions from one wallet contend for a nonce.
+ */
+const chainQueue = new Map()
+function enqueue(id, work) {
+  const prev = chainQueue.get(id) ?? Promise.resolve()
+  const next = prev.then(work, work).finally(() => {
+    if (chainQueue.get(id) === next) chainQueue.delete(id)
+  })
+  chainQueue.set(id, next)
+  return next
+}
+
+// One wallet, one nonce sequence: all attestations share a single lane.
+let chainLane = Promise.resolve()
+function serialize(work) {
+  const run = chainLane.then(work, work)
+  chainLane = run.catch(() => {})
+  return run
+}
+
+function attest(id, records) {
+  return enqueue(id, () => serialize(async () => {
+    const resolver = await setup.resolverAddress()
+    const key = await setup.deployerKey()
+    if (!resolver || !key) return
+    const name = await attestationName(id)
+    const { tx } = await ens.writeRecords(key, { resolver, name, records })
+    console.log(`  attested ${name} ${tx}`)
+  }))
+}
+
+function finalizeAttestation(id, records) {
+  return enqueue(id, () => serialize(async () => {
+    const resolver = await setup.resolverAddress()
+    const key = await setup.deployerKey()
+    if (!resolver || !key) return
+    const name = await attestationName(id)
+    const { tx } = await ens.finalizeRecords(key, { resolver, name, records })
+    console.log(`  finalized ${name} ${tx}`)
+  }))
+}
+
+/** Read an attestation back from chain — what anyone can verify independently. */
+app.get('/api/attestation/:id', requireHexParam('id', { length: 32 }), async (req, res) => {
+  const resolver = await setup.resolverAddress()
+  if (!resolver) return res.status(404).json({ error: 'no resolver attached' })
+  const name = await attestationName(req.params.id)
+  const keys = ['sender', 'sender.key', 'sender.sig', 'recipient', 'recipient.key', 'file.name', 'file.commitment', 'file.hash', 'swarm', 'sent', 'recipient.sig', 'delivered']
+  const out = {}
+  for (const k of keys) out[k] = await ens.readRecord(resolver, name, k).catch(() => '')
+  res.json({ name, resolver, records: out })
+})
+
 app.get('/api/transfers', setup.requireSetupToken, async (_req, res) => res.json(await store.list()))
 
 app.use(express.static(path.join(__dirname, '..', 'web')))

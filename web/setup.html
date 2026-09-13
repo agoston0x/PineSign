@@ -150,8 +150,13 @@
 
       <div class="row">
         <button class="primary" id="register-name" hidden>Register the name</button>
+        <button class="primary" id="attach-resolver" hidden>Attach the resolver</button>
         <button class="primary" id="deploy" disabled>Deploy the contract</button>
       </div>
+      <p class="hint" id="resolver-hint" hidden style="margin-top:8px">
+        The resolver is what makes <code>anything.tx.yourname.eth</code> resolve — every
+        transfer's attestation lives in its records, on chain, frozen once delivered.
+      </p>
       <p class="status" id="deploy-status"></p>
     </section>
 

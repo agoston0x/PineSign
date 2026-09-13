@@ -346,8 +346,12 @@ function render(state) {
     el('deploy').disabled = !state.fundedEnough || Boolean(state.receiptsAddress)
     el('deploy').textContent = state.receiptsAddress ? 'Contract deployed' : 'Deploy the contract'
 
+    el('attach-resolver').hidden = !state.canAttachResolver
+    el('resolver-hint').hidden = !state.canAttachResolver
+
     const outstanding = []
     if (!state.nameRegistered) outstanding.push('register the name')
+    if (state.canAttachResolver) outstanding.push('attach the resolver')
     if (!state.receiptsAddress) outstanding.push('deploy the contract')
 
     if (state.registrationAvailable === false) {
@@ -378,7 +382,9 @@ function render(state) {
   showOnly('step-done')
   el('subtitle').textContent = 'Configured and running.'
   el('d-name').textContent = state.parentName
-  el('d-registered').textContent = state.nameRegistered ? 'yes, on chain' : 'no — names are local only'
+  el('d-registered').textContent = state.nameRegistered
+    ? state.resolver ? `yes, resolver ${state.resolver.slice(0, 10)}…` : 'yes, no resolver'
+    : 'no — names are local only'
   el('d-address').textContent = state.receiptsAddress
   el('d-tx').textContent = state.deployTx
   el('d-deployer').textContent = state.deployer
@@ -690,6 +696,18 @@ el('register-name').addEventListener('click', async () => {
   } catch (err) {
     status('deploy-status', err.message, 'error')
     el('register-name').disabled = false
+  }
+})
+
+el('attach-resolver').addEventListener('click', async () => {
+  el('attach-resolver').disabled = true
+  clearTimeout(pollTimer)
+  status('deploy-status', 'Deploying the resolver and attaching it to the name — two transactions…')
+  try {
+    render(await api('/api/setup/resolver', { method: 'POST' }))
+  } catch (err) {
+    status('deploy-status', err.message, 'error')
+    el('attach-resolver').disabled = false
   }
 })
 

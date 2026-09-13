@@ -104,7 +104,7 @@ export async function status() {
     ? 'name'
     : !c.deployer
       ? 'keys'
-      : !c.receiptsAddress || !c.nameRegistered
+      : !c.receiptsAddress || !c.nameRegistered || !c.resolver
         ? 'fund'
         : !c.postageBatchId
           ? 'swarm'
@@ -164,6 +164,8 @@ export async function status() {
     out.registrationFee = price ? `${Number(price.formatted).toFixed(2)} ${price.symbol}` : null
   }
   out.nameRegistered = Boolean(c.nameRegistered)
+  out.resolver = c.resolver?.address ?? null
+  out.canAttachResolver = Boolean(c.nameRegistered && c.nameRegistration?.tokenId && !c.resolver)
   // Going back is only meaningful while nothing is committed on chain.
   out.canChangeName = !c.nameRegistered
   out.postageBatchId = c.postageBatchId ?? null
@@ -240,7 +242,40 @@ export async function registerName() {
   c.nameRegistered = true
   c.nameRegistration = result
   await persist()
+
+  // The name is only useful once it can carry records. Attach the resolver
+  // straight away so every transfer name beneath it resolves.
+  if (result.tokenId && result.registry) {
+    console.log(`  attaching resolver to ${c.parentName}…`)
+    const resolver = await ens.deployResolver(c.deployer.privateKey, {
+      registry: result.registry, tokenId: result.tokenId,
+    })
+    c.resolver = resolver
+    await persist()
+    console.log(`  resolver at ${resolver.address}`)
+  }
+
   return status()
+}
+
+/** For a name registered before resolvers existed: attach one now. */
+export async function attachResolver() {
+  const c = await load()
+  if (!c.nameRegistration?.tokenId) throw new Error('no token id recorded for this name')
+  if (c.resolver) throw new Error('a resolver is already attached')
+  c.resolver = await ens.deployResolver(c.deployer.privateKey, {
+    registry: c.nameRegistration.registry, tokenId: c.nameRegistration.tokenId,
+  })
+  await persist()
+  return status()
+}
+
+export async function resolverAddress() {
+  return (await load()).resolver?.address ?? null
+}
+
+export async function deployerKey() {
+  return (await load()).deployer?.privateKey ?? null
 }
 
 export async function deploy() {

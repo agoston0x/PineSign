@@ -21,6 +21,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { publicClient, RPC_URL } from './chain.js'
+import { keccak256, encodePacked, stringToBytes, toHex as viemHex } from 'viem'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -204,4 +205,100 @@ export async function transferName(privateKey, { registry, tokenId, to }) {
   const receipt = await publicClient.waitForTransactionReceipt({ hash })
   if (receipt.status !== 'success') throw new Error('the transfer reverted')
   return { tx: hash, to }
+}
+
+
+// ---- resolver: where the attestations live ----
+
+const REGISTRY_ABI = parseAbi([
+  'function setResolver(uint256 id, address resolver)',
+  'function getResolver(string label) view returns (address)',
+])
+
+async function resolverArtifact() {
+  return JSON.parse(await readFile(path.join(__dirname, '..', 'contracts', 'artifacts', 'PineSignResolver.json'), 'utf8'))
+}
+
+/**
+ * Deploy the resolver and attach it to the server's name in the v2 registry.
+ *
+ * From then on every `<x>.tx.<name>` resolves through it by ENSIP-10 wildcard,
+ * so per-transfer names carry records without a token being minted for each.
+ */
+export async function deployResolver(privateKey, { registry, tokenId }) {
+  const account = privateKeyToAccount(privateKey)
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(RPC_URL) })
+  const artifact = await resolverArtifact()
+
+  const deployHash = await wallet.deployContract({
+    abi: artifact.abi, bytecode: artifact.bytecode, args: [account.address],
+  })
+  const deployed = await publicClient.waitForTransactionReceipt({ hash: deployHash })
+  if (deployed.status !== 'success') throw new Error('resolver deployment reverted')
+
+  const setHash = await wallet.writeContract({
+    address: registry, abi: REGISTRY_ABI, functionName: 'setResolver',
+    args: [BigInt(tokenId), deployed.contractAddress],
+  })
+  const set = await publicClient.waitForTransactionReceipt({ hash: setHash })
+  if (set.status !== 'success') throw new Error('setResolver reverted')
+
+  return { address: deployed.contractAddress, deployTx: deployHash, setResolverTx: setHash }
+}
+
+/** Standard ENS namehash. */
+export function namehash(name) {
+  let node = `0x${'00'.repeat(32)}`
+  if (!name) return node
+  for (const label of name.split('.').reverse()) {
+    node = keccak256(encodePacked(['bytes32', 'bytes32'], [node, keccak256(stringToBytes(label))]))
+  }
+  return node
+}
+
+const RESOLVER_ABI = parseAbi([
+  'function setText(bytes32 node, string key, string value)',
+  'function setTexts(bytes32 node, string[] keys, string[] values)',
+  'function finalize(bytes32 node, string[] keys, string[] values)',
+  'function text(bytes32 node, string key) view returns (string)',
+  'function frozen(bytes32 node) view returns (bool)',
+])
+
+/**
+ * Write the sender's half of an attestation under `<id>.tx.<parent>`.
+ * One transaction, so the record is either all there or not there.
+ */
+export async function writeRecords(privateKey, { resolver, name, records }) {
+  const account = privateKeyToAccount(privateKey)
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(RPC_URL) })
+  const node = namehash(name)
+  const keys = Object.keys(records)
+  const values = keys.map((k) => String(records[k]))
+  const hash = await wallet.writeContract({
+    address: resolver, abi: RESOLVER_ABI, functionName: 'setTexts', args: [node, keys, values],
+  })
+  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  if (receipt.status !== 'success') throw new Error('setTexts reverted')
+  return { node, tx: hash }
+}
+
+/** Write the recipient's half and freeze the record: the receipt is final. */
+export async function finalizeRecords(privateKey, { resolver, name, records }) {
+  const account = privateKeyToAccount(privateKey)
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(RPC_URL) })
+  const node = namehash(name)
+  const keys = Object.keys(records)
+  const values = keys.map((k) => String(records[k]))
+  const hash = await wallet.writeContract({
+    address: resolver, abi: RESOLVER_ABI, functionName: 'finalize', args: [node, keys, values],
+  })
+  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  if (receipt.status !== 'success') throw new Error('finalize reverted')
+  return { node, tx: hash }
+}
+
+export async function readRecord(resolver, name, key) {
+  return publicClient.readContract({
+    address: resolver, abi: RESOLVER_ABI, functionName: 'text', args: [namehash(name), key],
+  })
 }
