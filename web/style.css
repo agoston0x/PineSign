@@ -571,3 +571,14 @@ body.admin { background: linear-gradient(180deg, #101827 0%, #12161f 100%); back
   border-radius: 20px; background: rgba(244, 132, 45, .14);
 }
 .wc-net.gnosis { color: #7bd88f; background: rgba(123, 216, 143, .14); }
+
+.inv-items { margin: 0; padding: 0; list-style: none; }
+.inv-items li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 8px 0; font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+.inv-items li:first-child { border-top: none; }
+.inv-items .who { color: var(--text); }
+.inv-items .st { color: var(--haze); white-space: nowrap; }
+.inv-items .st.accepted { color: #7bd88f; }

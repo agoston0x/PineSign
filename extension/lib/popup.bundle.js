@@ -3280,12 +3280,23 @@ var Gateway = class {
   }
   // ---- names ----
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer2, label, userToken) {
+  async registerName(signer2, label, userToken, inviteId = null) {
     return this.#post("/api/name/register", {
       ...await this.#auth(signer2),
       label,
-      userToken
+      userToken,
+      inviteId
     });
+  }
+  // ---- invitations ----
+  async invite(signer2, { toEmail, fromEmail }) {
+    return this.#post("/api/invite", { ...await this.#auth(signer2), toEmail, fromEmail });
+  }
+  inviteStatus(id) {
+    return this.#json(`/api/invite/${encodeURIComponent(id)}`);
+  }
+  async myInvites(signer2) {
+    return this.#post("/api/invites", await this.#auth(signer2));
   }
   nameAvailable(label) {
     return this.#json(`/api/name/available/${encodeURIComponent(label)}`);

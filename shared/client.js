@@ -74,12 +74,27 @@ export class Gateway {
   // ---- names ----
 
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer, label, userToken) {
+  async registerName(signer, label, userToken, inviteId = null) {
     return this.#post('/api/name/register', {
       ...(await this.#auth(signer)),
       label,
       userToken,
+      inviteId,
     })
+  }
+
+  // ---- invitations ----
+
+  async invite(signer, { toEmail, fromEmail }) {
+    return this.#post('/api/invite', { ...(await this.#auth(signer)), toEmail, fromEmail })
+  }
+
+  inviteStatus(id) {
+    return this.#json(`/api/invite/${encodeURIComponent(id)}`)
+  }
+
+  async myInvites(signer) {
+    return this.#post('/api/invites', await this.#auth(signer))
   }
 
   nameAvailable(label) {

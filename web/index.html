@@ -155,6 +155,11 @@
     <div class="section-pre">Get started</div>
     <h2 class="modal-title">Three things, once.</h2>
 
+    <div class="tip" id="invite-banner" hidden>
+      <strong id="invite-from">Someone</strong> wants to send you a file. Finish these steps
+      and they will be told you are ready.
+    </div>
+
     <ol class="setup-steps">
       <li id="s-account" class="todo">
         <div class="marker"></div>
@@ -199,9 +204,28 @@
       </li>
     </ol>
 
-    <p class="hint" id="done-note" hidden>
-      You are set up. Open the extension to send a file.
-    </p>
+    <div id="done-note" hidden>
+      <h3 style="margin:22px 0 6px">Send someone a file</h3>
+      <p class="hint">
+        They need a key before anything can be encrypted for them. Invite them by email;
+        once they have signed up, you will be told to go ahead.
+      </p>
+      <label for="inv-to">Their email</label>
+      <input id="inv-to" type="text" placeholder="bob@example.com" spellcheck="false" autocomplete="off" />
+      <label for="inv-from" style="margin-top:10px">Your email, for the receipt</label>
+      <input id="inv-from" type="text" placeholder="you@example.com" spellcheck="false" autocomplete="off" />
+      <div class="row"><button class="primary" id="inv-send" disabled>Send invitation</button></div>
+      <p class="status" id="inv-status"></p>
+
+      <div id="inv-list" hidden>
+        <h3 style="margin:22px 0 6px">Your invitations</h3>
+        <ul class="inv-items" id="inv-items"></ul>
+      </div>
+
+      <p class="hint" style="margin-top:18px">
+        Already know their name? Open the extension and send to it directly.
+      </p>
+    </div>
   </div>
 </div>
 

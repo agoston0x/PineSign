@@ -20,6 +20,9 @@ let name = null
 let ready = false
 let signInAvailable = false
 
+/** Set when the visitor came from an invitation link. */
+const inviteId = new URLSearchParams(location.search).get('invite')
+
 function status(node, message, kind = '') {
   const n = el(node)
   n.textContent = message
@@ -73,6 +76,8 @@ function renderName() {
     el('your-name').hidden = false
     el('claim-form').hidden = true
     el('done-note').hidden = false
+    el('invite-banner').hidden = true
+    refreshInvites()
     return mark('s-name', 'done')
   }
 
@@ -83,6 +88,52 @@ function renderName() {
     status('name-status', wallet ? 'Install the extension first.' : 'Sign in first.')
   } else {
     status('name-status', '')
+  }
+}
+
+// ---- invitations ----
+
+function validEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
+
+function checkInviteForm() {
+  el('inv-send').disabled = !(validEmail(el('inv-to').value.trim()) && validEmail(el('inv-from').value.trim()))
+}
+el('inv-to').addEventListener('input', checkInviteForm)
+el('inv-from').addEventListener('input', checkInviteForm)
+
+el('inv-send').addEventListener('click', async () => {
+  el('inv-send').disabled = true
+  status('inv-status', 'Sending…')
+  try {
+    await gateway.invite(await getSigner(), {
+      toEmail: el('inv-to').value.trim(),
+      fromEmail: el('inv-from').value.trim(),
+    })
+    status('inv-status', `Invitation sent to ${el('inv-to').value.trim()}. You will get an email when they accept.`, 'done')
+    el('inv-to').value = ''
+    refreshInvites()
+  } catch (err) {
+    status('inv-status', err.message, 'error')
+    checkInviteForm()
+  }
+})
+
+async function refreshInvites() {
+  try {
+    const list = await gateway.myInvites(await getSigner())
+    el('inv-list').hidden = list.length === 0
+    el('inv-items').innerHTML = list
+      .map((i) => {
+        const state = i.status === 'accepted'
+          ? `accepted as ${i.acceptedBy.name}`
+          : i.status
+        return `<li><span class="who">${i.toEmail}</span><span class="st ${i.status}">${state}</span></li>`
+      })
+      .join('')
+  } catch {
+    // Not fatal; the form still works.
   }
 }
 
@@ -149,9 +200,22 @@ el('signin').addEventListener('click', async () => {
 
 // ---- boot ----
 
+async function showInvitation() {
+  if (!inviteId) return
+  try {
+    const inv = await gateway.inviteStatus(inviteId)
+    if (inv.status !== 'pending') return
+    el('invite-from').textContent = inv.fromName
+    el('invite-banner').hidden = false
+  } catch {
+    // An invalid link just gets the ordinary flow.
+  }
+}
+
 async function boot() {
   ready = true
   el('signin').disabled = true
+  showInvitation()
 
   const circleReady = initSignIn({
     onStep: (m) => status('signin-status', m),

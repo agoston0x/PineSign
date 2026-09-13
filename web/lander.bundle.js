@@ -2537,6 +2537,10 @@ function addressFrom(privateKey) {
   const uncompressed = secp256k1.getPublicKey(privateKey, false).slice(1);
   return "0x" + toHex(keccak_256(uncompressed).slice(-20));
 }
+function sign(digest, privateKey) {
+  const sig = secp256k1.sign(digest, privateKey);
+  return sig.toCompactRawBytes();
+}
 function toHex(bytes) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -2550,6 +2554,15 @@ function fromHex(hex) {
 }
 
 // shared/client.js
+function localSigner(identity3) {
+  return {
+    publicKeyHex: identity3.publicKeyHex,
+    address: identity3.address,
+    async signDigest(digest) {
+      return toHex(sign(digest, identity3.privateKey));
+    }
+  };
+}
 var Gateway = class {
   constructor(baseUrl) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -2593,12 +2606,23 @@ var Gateway = class {
   }
   // ---- names ----
   /** Claim a name and publish an encryption key under it. */
-  async registerName(signer2, label, userToken) {
+  async registerName(signer2, label, userToken, inviteId2 = null) {
     return this.#post("/api/name/register", {
       ...await this.#auth(signer2),
       label,
-      userToken
+      userToken,
+      inviteId: inviteId2
     });
+  }
+  // ---- invitations ----
+  async invite(signer2, { toEmail, fromEmail }) {
+    return this.#post("/api/invite", { ...await this.#auth(signer2), toEmail, fromEmail });
+  }
+  inviteStatus(id) {
+    return this.#json(`/api/invite/${encodeURIComponent(id)}`);
+  }
+  async myInvites(signer2) {
+    return this.#post("/api/invites", await this.#auth(signer2));
   }
   nameAvailable(label) {
     return this.#json(`/api/name/available/${encodeURIComponent(label)}`);
@@ -2660,6 +2684,17 @@ async function extensionPresent() {
 function getIdentity() {
   return request("identity", {});
 }
+async function bridgeSigner2() {
+  const identity3 = await getIdentity();
+  return {
+    publicKeyHex: identity3.publicKey,
+    address: identity3.address,
+    async signDigest(digest) {
+      const { signature } = await request("signDigest", { digest: toHex(digest) });
+      return signature;
+    }
+  };
+}
 
 // shared/identity.js
 var KEY = "pinesign.identity";
@@ -2709,6 +2744,10 @@ async function identity() {
   if (await keyMode() === "extension") return getIdentity();
   const id = await getOrCreateIdentity();
   return { publicKey: id.publicKeyHex, address: id.address };
+}
+async function signer() {
+  if (await keyMode() === "extension") return bridgeSigner2();
+  return localSigner(await getOrCreateIdentity());
 }
 
 // web/src/signup.js
@@ -2863,6 +2902,7 @@ var wallet = null;
 var name = null;
 var ready2 = false;
 var signInAvailable = false;
+var inviteId = new URLSearchParams(location.search).get("invite");
 function status(node, message, kind = "") {
   const n = el(node);
   n.textContent = message;
@@ -2907,6 +2947,8 @@ function renderName() {
     el("your-name").hidden = false;
     el("claim-form").hidden = true;
     el("done-note").hidden = false;
+    el("invite-banner").hidden = true;
+    refreshInvites();
     return mark("s-name", "done");
   }
   const can = Boolean(identity2 && wallet);
@@ -2916,6 +2958,41 @@ function renderName() {
     status("name-status", wallet ? "Install the extension first." : "Sign in first.");
   } else {
     status("name-status", "");
+  }
+}
+function validEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+function checkInviteForm() {
+  el("inv-send").disabled = !(validEmail(el("inv-to").value.trim()) && validEmail(el("inv-from").value.trim()));
+}
+el("inv-to").addEventListener("input", checkInviteForm);
+el("inv-from").addEventListener("input", checkInviteForm);
+el("inv-send").addEventListener("click", async () => {
+  el("inv-send").disabled = true;
+  status("inv-status", "Sending\u2026");
+  try {
+    await gateway.invite(await signer(), {
+      toEmail: el("inv-to").value.trim(),
+      fromEmail: el("inv-from").value.trim()
+    });
+    status("inv-status", `Invitation sent to ${el("inv-to").value.trim()}. You will get an email when they accept.`, "done");
+    el("inv-to").value = "";
+    refreshInvites();
+  } catch (err) {
+    status("inv-status", err.message, "error");
+    checkInviteForm();
+  }
+});
+async function refreshInvites() {
+  try {
+    const list = await gateway.myInvites(await signer());
+    el("inv-list").hidden = list.length === 0;
+    el("inv-items").innerHTML = list.map((i) => {
+      const state = i.status === "accepted" ? `accepted as ${i.acceptedBy.name}` : i.status;
+      return `<li><span class="who">${i.toEmail}</span><span class="st ${i.status}">${state}</span></li>`;
+    }).join("");
+  } catch {
   }
 }
 var checkTimer = null;
@@ -2969,9 +3046,20 @@ el("signin").addEventListener("click", async () => {
     el("signin").disabled = false;
   }
 });
+async function showInvitation() {
+  if (!inviteId) return;
+  try {
+    const inv = await gateway.inviteStatus(inviteId);
+    if (inv.status !== "pending") return;
+    el("invite-from").textContent = inv.fromName;
+    el("invite-banner").hidden = false;
+  } catch {
+  }
+}
 async function boot() {
   ready2 = true;
   el("signin").disabled = true;
+  showInvitation();
   const circleReady = initSignIn({
     onStep: (m) => status("signin-status", m),
     onWallet: (w) => {

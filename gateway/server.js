@@ -18,6 +18,8 @@ import * as chain from './chain.js'
 import * as circle from './circle.js'
 import * as admin from './admin.js'
 import { rateLimit, requireHexParam } from './limits.js'
+import * as invites from './invites.js'
+import * as mail from './mail.js'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
@@ -28,6 +30,11 @@ const PORT = process.env.PORT ?? 8788
 const HOST = process.env.HOST ?? '0.0.0.0'
 
 const app = express()
+
+/** Public origin for links in emails, e.g. https://pinesign.claws.page. */
+function publicOrigin(req) {
+  return process.env.PUBLIC_ORIGIN ?? `${req.protocol}://${req.get('host')}`
+}
 
 // Behind Caddy or nginx, the client address arrives in a forwarded header;
 // without this every visitor looks like the proxy and rate limiting is useless.
@@ -231,6 +238,43 @@ app.post('/api/circle/wallets', limitCircle, async (req, res) => {
   }
 })
 
+// ---- invitations ----
+
+/**
+ * Alice invites Bob by email. Requires a name: an invitation is an offer to
+ * send, and only a named sender may send.
+ */
+app.post('/api/invite', limitSend, requireSignature, async (req, res) => {
+  try {
+    const sender = await names.reverse(req.pubKey)
+    if (!sender) return res.status(403).json({ error: 'claim a name before inviting anyone' })
+
+    const { toEmail, fromEmail } = req.body
+    const invite = await invites.create({
+      fromPubKey: req.pubKey, fromName: sender.name, fromEmail, toEmail,
+    })
+
+    const link = `${publicOrigin(req)}/?invite=${invite.id}#get-started`
+    await mail.invitation({ to: toEmail, fromName: sender.name, link })
+
+    res.json({ id: invite.id, link, status: invite.status })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/** What the recipient sees when they open the link: who, and whether it still stands. */
+app.get('/api/invite/:id', requireHexParam('id', { length: 24 }), async (req, res) => {
+  const inv = await invites.get(req.params.id)
+  if (!inv) return res.status(404).json({ error: 'no such invitation' })
+  res.json({ id: inv.id, fromName: inv.fromName, status: inv.status, acceptedBy: inv.acceptedBy?.name ?? null })
+})
+
+/** Sender's list, so the page can show who has accepted. */
+app.post('/api/invites', requireSignature, async (req, res) => {
+  res.json(await invites.bySender(req.pubKey))
+})
+
 // ---- names ----
 
 /** Is this label free? Asked while the user types. */
@@ -268,6 +312,25 @@ app.post('/api/name/register', limitSend, requireSignature, async (req, res) => 
       pubKey: req.pubKey,
       address,
     })
+
+    // Arrived via an invitation: close the loop and tell the sender to proceed.
+    const { inviteId } = req.body
+    if (inviteId) {
+      try {
+        const inv = await invites.accept(inviteId, { pubKey: req.pubKey, name: record.name })
+        if (inv.fromEmail) {
+          await mail.accepted({
+            to: inv.fromEmail,
+            recipientName: record.name,
+            link: `${publicOrigin(req)}/#get-started`,
+          })
+        }
+      } catch (err) {
+        // A stale invitation must not stop the name from being claimed.
+        console.log(`  invitation ${inviteId} not accepted: ${err.message}`)
+      }
+    }
+
     res.json(record)
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -341,12 +404,20 @@ app.post('/api/send', limitSend, requireSignature, async (req, res) => {
       requireExtension: Boolean(requireExtension),
     })
 
-    res.json({
-      id,
-      reference,
-      expiresAt: transfer.expiresAt,
-      claimUrl: `${req.protocol}://${req.get('host')}/claim.html?id=${id}`,
-    })
+    const claimUrl = `${publicOrigin(req)}/claim.html?id=${id}`
+
+    const recipientEmail = await invites.emailFor(recipientPubKey)
+    if (recipientEmail) {
+      mail.fileReady({
+        to: recipientEmail,
+        fromName: senderName.name,
+        filename: filename ?? 'a file',
+        link: claimUrl,
+        expires: new Date(transfer.expiresAt).toUTCString(),
+      }).catch((err) => console.log(`  mail failed: ${err.message}`))
+    }
+
+    res.json({ id, reference, expiresAt: transfer.expiresAt, claimUrl })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -405,6 +476,17 @@ app.post('/api/claim', requireSignature, async (req, res) => {
       return res.status(400).json({ error: 'claim signature does not match the transfer' })
     }
     const updated = await store.recordClaim(id, { recipientSignature: claimSignature })
+
+    const senderEmail = await invites.senderEmailFor(t.senderPubKey)
+    if (senderEmail) {
+      mail.delivered({
+        to: senderEmail,
+        recipientName: t.recipientName ?? 'the recipient',
+        filename: t.filename,
+        receiptLink: `${publicOrigin(req)}/claim.html?id=${id}`,
+      }).catch((err) => console.log(`  mail failed: ${err.message}`))
+    }
+
     res.json({ ok: true, claim: updated.claim })
   } catch (err) {
     res.status(400).json({ error: err.message })
