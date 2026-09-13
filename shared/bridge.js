@@ -30,6 +30,9 @@ function request(type, payload, timeoutMs = TIMEOUT_MS) {
       if (event.source !== window) return
       const msg = event.data
       if (msg?.tag !== TAG || msg.requestId !== requestId) return
+      // The page hears its own outgoing request too — same id, no response
+      // yet. Only a message carrying a response is the extension's answer.
+      if (!('response' in msg)) return
 
       clearTimeout(timer)
       window.removeEventListener('message', onMessage)
