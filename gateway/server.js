@@ -612,7 +612,16 @@ app.get('/api/transfers', setup.requireSetupToken, async (_req, res) => res.json
 // Clean URL for the demo video page, for the submission form.
 app.get('/demovideo', (_req, res) => res.sendFile(path.join(__dirname, '..', 'web', 'demovideo.html')))
 
-app.use(express.static(path.join(__dirname, '..', 'web')))
+// Bundles change on every deploy. Served with no-cache, the browser revalidates
+// each load (cheap, ETag) instead of running last week's code from its cache.
+app.use(express.static(path.join(__dirname, '..', 'web'), {
+  etag: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.bundle.js') || filePath.endsWith('.html')) {
+      res.set('Cache-Control', 'no-cache')
+    }
+  },
+}))
 
 app.listen(PORT, HOST, async () => {
   const state = await setup.status()
