@@ -2684,7 +2684,7 @@ async function extensionPresent() {
 function getIdentity() {
   return request("identity", {});
 }
-async function bridgeSigner2() {
+async function bridgeSigner() {
   const identity3 = await getIdentity();
   return {
     publicKeyHex: identity3.publicKey,
@@ -2746,7 +2746,7 @@ async function identity() {
   return { publicKey: id.publicKeyHex, address: id.address };
 }
 async function signer() {
-  if (await keyMode() === "extension") return bridgeSigner2();
+  if (await keyMode() === "extension") return bridgeSigner();
   return localSigner(await getOrCreateIdentity());
 }
 
@@ -3028,7 +3028,7 @@ el("claim").addEventListener("click", async () => {
   el("claim").disabled = true;
   status("name-status", "Claiming\u2026");
   try {
-    name = await gateway.registerName(await bridgeSigner(), checked, sessionToken());
+    name = await gateway.registerName(await signer(), checked, sessionToken(), inviteId);
     status("name-status", "");
     renderName();
   } catch (err) {

@@ -178,7 +178,7 @@ el('claim').addEventListener('click', async () => {
   try {
     // Signed by the extension key; the wallet comes from the Circle token, which
     // the server verifies rather than taking our word for.
-    name = await gateway.registerName(await bridgeSigner(), checked, sessionToken())
+    name = await gateway.registerName(await getSigner(), checked, sessionToken(), inviteId)
     status('name-status', '')
     renderName()
   } catch (err) {
