@@ -7,7 +7,7 @@
  */
 
 import { Gateway } from '../../shared/client.js'
-import { extensionPresent, getIdentity, openTransfer, bridgeSigner } from '../../shared/bridge.js'
+import { keyMode, identity as getIdentity, openTransfer, signer } from '../../shared/keysource.js'
 
 const el = (id) => document.getElementById(id)
 const gateway = new Gateway(location.origin)
@@ -45,11 +45,7 @@ function showReceipt(claim) {
 async function load() {
   if (!id) return subtitle('No transfer in this link.', '#ff9c7a')
 
-  if (!(await extensionPresent())) {
-    el('install-panel').hidden = false
-    return subtitle('Install the PineSign extension to open this file.', '#ff9c7a')
-  }
-
+  const mode = await keyMode()
   identity = await getIdentity()
   const named = await gateway.reverseName(identity.publicKey)
   el('pubkey').textContent = named ? named.name : identity.publicKey
@@ -71,6 +67,18 @@ async function load() {
   if (transfer.expired) {
     return subtitle('This transfer expired. The file is gone.', '#ff9c7a')
   }
+
+  // The sender may have insisted on the extension, so that no code served by
+  // this site ever handles the key. In that case a page-held key is refused.
+  if (transfer.requireExtension && mode !== 'extension') {
+    el('install-panel').hidden = false
+    el('identity-panel').hidden = true
+    return subtitle('The sender requires the extension for this file.', '#ff9c7a')
+  }
+
+  el('key-mode').textContent = mode === 'extension'
+    ? 'Your key is in the extension. Nothing this page loads can reach it.'
+    : 'Your key is held in this browser. Private in use — but you are trusting the code this page served you.'
 
   // The recipient is named in the transfer itself, so a link alone opens nothing.
   if (transfer.recipientPubKey !== identity.publicKey) {
@@ -105,7 +113,7 @@ el('accept').addEventListener('click', async () => {
     })
 
     say('Recording the receipt…')
-    const { claim } = await gateway.claim(await bridgeSigner(), id, opened.signature)
+    const { claim } = await gateway.claim(await signer(), id, opened.signature)
 
     const bytes = Uint8Array.from(opened.plaintext)
     const url = URL.createObjectURL(new Blob([bytes]))

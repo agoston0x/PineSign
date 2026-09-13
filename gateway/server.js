@@ -296,7 +296,7 @@ app.get('/api/names', setup.requireSetupToken, async (_req, res) => res.json(awa
  */
 app.post('/api/send', limitSend, requireSignature, async (req, res) => {
   try {
-    const { recipientPubKey, plaintextHash, senderSignature, filename, ciphertext } = req.body
+    const { recipientPubKey, plaintextHash, senderSignature, filename, ciphertext, requireExtension } = req.body
     if (!recipientPubKey || !plaintextHash || !senderSignature || !ciphertext) {
       return res.status(400).json({ error: 'recipientPubKey, plaintextHash, senderSignature and ciphertext required' })
     }
@@ -336,6 +336,9 @@ app.post('/api/send', limitSend, requireSignature, async (req, res) => {
       filename: filename ?? 'file',
       size: blob.length,
       digest: toHex(digest),
+      // Alice's call: whether the recipient may open this in a plain browser,
+      // or must use the extension so no served code ever touches the key.
+      requireExtension: Boolean(requireExtension),
     })
 
     res.json({
@@ -368,6 +371,7 @@ app.get('/api/transfer/:id', requireHexParam('id', { length: 32 }), async (req, 
     createdAt: t.createdAt,
     expiresAt: t.expiresAt,
     expired: Boolean(t.expired),
+    requireExtension: Boolean(t.requireExtension),
     claim: t.claim,
   })
 })

@@ -12,6 +12,9 @@ const targets = [
   { in: 'web/src/nav.js', out: 'web/nav.bundle.js' },
 ]
 
+import { execSync } from 'node:child_process'
+import { rmSync } from 'node:fs'
+
 for (const target of targets) {
   const result = await build({
     entryPoints: [target.in],
@@ -25,3 +28,12 @@ for (const target of targets) {
   const bytes = Object.values(result.metafile.outputs)[0].bytes
   console.log(`  ${target.out}  ${(bytes / 1024).toFixed(0)}kb`)
 }
+
+// The extension, zipped for download from the site. Bundles are built above,
+// so the archive is always current with them.
+rmSync('web/pinesign-extension.zip', { force: true })
+execSync(
+  'cd extension && zip -qr ../web/pinesign-extension.zip manifest.json popup.html popup.css content.js icons lib',
+  { stdio: 'inherit' },
+)
+console.log('  web/pinesign-extension.zip')

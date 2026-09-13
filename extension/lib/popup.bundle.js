@@ -3438,7 +3438,8 @@ el("send").addEventListener("click", async () => {
       plaintextHash,
       senderSignature: toHex(sign(digest, identity.privateKey)),
       filename: file.name,
-      ciphertext: toBase64(ciphertext)
+      ciphertext: toBase64(ciphertext),
+      requireExtension: el("require-extension").checked
     });
     el("claim-link").textContent = result.claimUrl;
     el("result").hidden = false;

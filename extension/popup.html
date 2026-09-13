@@ -44,6 +44,14 @@
     <label for="file">File</label>
     <input id="file" type="file" />
 
+    <label class="toggle">
+      <input id="require-extension" type="checkbox" />
+      <span>
+        <strong>Maximum privacy</strong>
+        <em>Recipient must use the extension — no served code ever touches their key. Desktop only.</em>
+      </span>
+    </label>
+
     <button class="primary" id="send" disabled>Encrypt and send</button>
     <p class="status" id="status"></p>
 

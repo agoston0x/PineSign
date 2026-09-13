@@ -7,7 +7,7 @@
  */
 
 import { Gateway } from '../../shared/client.js'
-import { extensionPresent, getIdentity, bridgeSigner } from '../../shared/bridge.js'
+import { keyMode, identity as getIdentity, signer as getSigner } from '../../shared/keysource.js'
 import { initSignIn, signInWithGoogle, currentWallet, sessionToken } from './signup.js'
 import { renderAccountChip } from './session.js'
 
@@ -53,12 +53,17 @@ function renderAccount() {
   renderAccountChip(openModal)
 }
 
-function renderExtension() {
-  if (!identity) return mark('s-extension', 'todo')
+function renderExtension(mode) {
   el('enc-key').textContent = identity.publicKey
   el('enc-key').hidden = false
-  el('extension-install').hidden = true
-  el('extension-hint').textContent = 'Installed. This key decrypts files sent to you.'
+  if (mode === 'extension') {
+    el('extension-install').hidden = true
+    el('extension-hint').textContent = 'Installed. Your key lives there, out of reach of anything this site serves.'
+  } else {
+    el('extension-install').hidden = false
+    el('extension-hint').textContent =
+      'Your key is held in this browser for now — fine for receiving. Install the extension for maximum privacy, or to send.'
+  }
   mark('s-extension', 'done')
 }
 
@@ -159,16 +164,17 @@ async function boot() {
     onError: (err) => status('signin-status', err.message, 'error'),
   })
 
-  const [health, hasExtension, circle] = await Promise.all([
+  const [health, mode, circle] = await Promise.all([
     gateway.health().catch(() => null),
-    extensionPresent(),
+    keyMode(),
     circleReady,
   ])
 
   if (health?.parentName) el('suffix').textContent = `.${health.parentName}`
 
-  if (hasExtension) identity = await getIdentity()
-  renderExtension()
+  // A key exists either way — in the extension if installed, else in this page.
+  identity = await getIdentity()
+  renderExtension(mode)
 
   if (!circle.configured) {
     el('account-hint').textContent = 'This server has no Circle credentials configured.'

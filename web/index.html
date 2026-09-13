@@ -170,12 +170,12 @@
       <li id="s-extension" class="todo">
         <div class="marker"></div>
         <div class="body">
-          <h3>The extension</h3>
-          <p class="hint" id="extension-hint">
-            Files are encrypted on your own machine, by a key this page is never allowed
-            to see. That key lives in the extension.
-          </p>
-          <p class="hint mono" id="extension-install">Load <code>extension/</code> unpacked at chrome://extensions</p>
+          <h3>Your key</h3>
+          <p class="hint" id="extension-hint">Checking…</p>
+          <div id="extension-install" hidden>
+            <a class="ghost" href="/pinesign-extension.zip" style="display:inline-block;text-decoration:none">Download the extension</a>
+            <p class="hint" style="margin-top:8px">Desktop Chrome. Unzip → chrome://extensions → Developer mode → Load unpacked.</p>
+          </div>
           <code class="key" id="enc-key" hidden></code>
         </div>
       </li>
