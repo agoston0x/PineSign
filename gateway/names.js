@@ -64,7 +64,14 @@ export async function register(label, { pubKey, address }) {
   const all = await load()
   const name = fullName(label)
   const existing = all[name]
-  if (existing && existing.pubKey !== pubKey) throw new Error('that name is taken')
+
+  // A name belongs to a wallet, not to a key. The same wallet may publish a
+  // new key under it — typically when its owner installs the extension after
+  // claiming on the page, and the key that matters is now the extension's.
+  if (existing && existing.pubKey !== pubKey) {
+    const sameOwner = address && existing.address && existing.address.toLowerCase() === address.toLowerCase()
+    if (!sameOwner) throw new Error('that name is taken')
+  }
 
   all[name] = {
     name,
@@ -88,6 +95,11 @@ export async function resolve(nameOrLabel) {
 export async function reverse(pubKey) {
   const all = await load()
   return Object.values(all).find((n) => n.pubKey === pubKey) ?? null
+}
+
+export async function byAddress(address) {
+  const all = await load()
+  return Object.values(all).find((n) => n.address && n.address.toLowerCase() === address.toLowerCase()) ?? null
 }
 
 export async function list() {

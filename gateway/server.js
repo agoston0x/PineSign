@@ -364,6 +364,12 @@ app.get('/api/name/resolve/:name', async (req, res) => {
   res.json(record)
 })
 
+app.get('/api/name/by-address/:address', async (req, res) => {
+  const record = await names.byAddress(req.params.address)
+  if (!record) return res.status(404).json({ error: 'this wallet has no name' })
+  res.json(record)
+})
+
 app.get('/api/name/reverse/:pubKey', async (req, res) => {
   const record = await names.reverse(req.params.pubKey.toLowerCase())
   if (!record) return res.status(404).json({ error: 'this key has no name' })

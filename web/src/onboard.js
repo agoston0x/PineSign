@@ -78,6 +78,15 @@ function renderExtension(mode) {
 }
 
 function renderName() {
+  // Named, but under a different key than the one this page now has (the
+  // extension was installed after claiming): offer to move the name over,
+  // since the extension is what sends.
+  if (name && identity && name.pubKey !== identity.publicKey) {
+    el('rebind').hidden = false
+  } else {
+    el('rebind').hidden = true
+  }
+
   if (name) {
     el('your-name').textContent = name.name
     el('your-name').hidden = false

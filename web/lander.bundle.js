@@ -2624,6 +2624,14 @@ var Gateway = class {
   async myInvites(signer2) {
     return this.#post("/api/invites", await this.#auth(signer2));
   }
+  /** A wallet's name, whichever key it currently publishes. */
+  async nameByAddress(address) {
+    try {
+      return await this.#json(`/api/name/by-address/${address}`);
+    } catch {
+      return null;
+    }
+  }
   nameAvailable(label) {
     return this.#json(`/api/name/available/${encodeURIComponent(label)}`);
   }
@@ -2945,6 +2953,11 @@ function renderExtension(mode2) {
   mark("s-extension", "done");
 }
 function renderName() {
+  if (name && identity2 && name.pubKey !== identity2.publicKey) {
+    el("rebind").hidden = false;
+  } else {
+    el("rebind").hidden = true;
+  }
   if (name) {
     el("your-name").textContent = name.name;
     el("your-name").hidden = false;

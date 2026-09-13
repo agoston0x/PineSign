@@ -3298,6 +3298,14 @@ var Gateway = class {
   async myInvites(signer2) {
     return this.#post("/api/invites", await this.#auth(signer2));
   }
+  /** A wallet's name, whichever key it currently publishes. */
+  async nameByAddress(address) {
+    try {
+      return await this.#json(`/api/name/by-address/${address}`);
+    } catch {
+      return null;
+    }
+  }
   nameAvailable(label) {
     return this.#json(`/api/name/available/${encodeURIComponent(label)}`);
   }
