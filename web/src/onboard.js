@@ -20,8 +20,15 @@ let name = null
 let ready = false
 let signInAvailable = false
 
-/** Set when the visitor came from an invitation link. */
-const inviteId = new URLSearchParams(location.search).get('invite')
+/**
+ * The invitation this visit came from. Remembered across the Google sign-in
+ * redirect, which returns to the site root and would otherwise lose the query
+ * string — and with it the fact that this person was invited at all.
+ */
+const INVITE_KEY = 'pinesign.invite'
+const fromUrl = new URLSearchParams(location.search).get('invite')
+if (fromUrl) localStorage.setItem(INVITE_KEY, fromUrl)
+const inviteId = fromUrl ?? localStorage.getItem(INVITE_KEY)
 
 function status(node, message, kind = '') {
   const n = el(node)
@@ -179,6 +186,7 @@ el('claim').addEventListener('click', async () => {
     // Signed by the extension key; the wallet comes from the Circle token, which
     // the server verifies rather than taking our word for.
     name = await gateway.registerName(await getSigner(), checked, sessionToken(), inviteId)
+    localStorage.removeItem(INVITE_KEY) // used; a later visit is not an acceptance
     status('name-status', '')
     renderName()
   } catch (err) {

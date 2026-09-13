@@ -2902,7 +2902,10 @@ var wallet = null;
 var name = null;
 var ready2 = false;
 var signInAvailable = false;
-var inviteId = new URLSearchParams(location.search).get("invite");
+var INVITE_KEY = "pinesign.invite";
+var fromUrl = new URLSearchParams(location.search).get("invite");
+if (fromUrl) localStorage.setItem(INVITE_KEY, fromUrl);
+var inviteId = fromUrl ?? localStorage.getItem(INVITE_KEY);
 function status(node, message, kind = "") {
   const n = el(node);
   n.textContent = message;
@@ -3029,6 +3032,7 @@ el("claim").addEventListener("click", async () => {
   status("name-status", "Claiming\u2026");
   try {
     name = await gateway.registerName(await signer(), checked, sessionToken(), inviteId);
+    localStorage.removeItem(INVITE_KEY);
     status("name-status", "");
     renderName();
   } catch (err) {
