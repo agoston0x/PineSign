@@ -33,6 +33,17 @@ const HOST = process.env.HOST ?? '0.0.0.0'
 
 const app = express()
 
+/**
+ * A chain error's message includes the entire request body — kilobytes of
+ * bytecode nobody can act on. Keep the one line that says what went wrong.
+ */
+function tidy(err) {
+  const short = err.shortMessage ?? err.message ?? String(err)
+  const detail = err.details ?? err.cause?.details
+  const line = detail ? `${short.split('\n')[0]} — ${String(detail).split('\n')[0]}` : short.split('\n')[0]
+  return line.length > 300 ? line.slice(0, 300) + '…' : line
+}
+
 /** Public origin for links in emails, e.g. https://pinesign.claws.page. */
 function publicOrigin(req) {
   return process.env.PUBLIC_ORIGIN ?? `${req.protocol}://${req.get('host')}`
@@ -163,7 +174,7 @@ app.post('/api/setup/register-name', setup.requireSetupToken, async (req, res) =
   try {
     res.json(await setup.registerName())
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    res.status(400).json({ error: tidy(err) })
   }
 })
 
@@ -171,7 +182,7 @@ app.post('/api/setup/resolver', setup.requireSetupToken, async (_req, res) => {
   try {
     res.json(await setup.attachResolver())
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    res.status(400).json({ error: tidy(err) })
   }
 })
 
@@ -179,7 +190,7 @@ app.post('/api/setup/deploy', setup.requireSetupToken, async (_req, res) => {
   try {
     res.json(await setup.deploy())
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    res.status(400).json({ error: tidy(err) })
   }
 })
 

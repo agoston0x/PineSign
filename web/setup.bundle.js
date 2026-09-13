@@ -326,6 +326,10 @@ function render(state) {
     el("deploy").textContent = state.receiptsAddress ? "Contract deployed" : "Deploy the contract";
     el("attach-resolver").hidden = !state.canAttachResolver;
     el("resolver-hint").hidden = !state.canAttachResolver;
+    if (state.canAttachResolver) {
+      el("attach-resolver").disabled = state.canAffordResolver === false;
+      el("attach-resolver").textContent = state.canAffordResolver === false ? `Need ${Number(state.resolverShortfall).toFixed(4)} ETH more for the resolver` : "Attach the resolver";
+    }
     const outstanding = [];
     if (!state.nameRegistered) outstanding.push("register the name");
     if (state.canAttachResolver) outstanding.push("attach the resolver");

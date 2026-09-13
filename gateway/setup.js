@@ -166,6 +166,11 @@ export async function status() {
   out.nameRegistered = Boolean(c.nameRegistered)
   out.resolver = c.resolver?.address ?? null
   out.canAttachResolver = Boolean(c.nameRegistered && c.nameRegistration?.tokenId && !c.resolver)
+  if (out.canAttachResolver && out.balance && out.budget?.resolverGas) {
+    const needed = (BigInt(out.budget.resolverGas.wei) * 130n) / 100n
+    out.canAffordResolver = BigInt(out.balance.wei) >= needed
+    out.resolverShortfall = out.canAffordResolver ? null : chain.formatWei(needed - BigInt(out.balance.wei))
+  }
   // Going back is only meaningful while nothing is committed on chain.
   out.canChangeName = !c.nameRegistered
   out.postageBatchId = c.postageBatchId ?? null

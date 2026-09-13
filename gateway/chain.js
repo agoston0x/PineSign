@@ -236,7 +236,9 @@ export async function budget(label, currentBalanceWei = 0n) {
    */
   // Register is a mint, an approve, a commit and a register — four transactions.
   const registrationGas = 420000n
-  const oneOff = (registrationGas + deployGas) * gasPrice
+  // The resolver is the larger contract, plus one call to attach it.
+  const resolverGas = 1250000n
+  const oneOff = (registrationGas + deployGas + resolverGas) * gasPrice
   const pack = (label, note, users, transfers, includeOneOff = true) => {
     const raw =
       (includeOneOff ? oneOff : 0n) +
@@ -265,6 +267,7 @@ export async function budget(label, currentBalanceWei = 0n) {
     registration,
     deploy: at(deployGas),
     registrationGas: at(registrationGas),
+    resolverGas: at(resolverGas),
     perUser: at(perUser),
     perTransfer: at(perTransfer),
     hundredUsers: at(perUser * 100n),
