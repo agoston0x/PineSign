@@ -3324,7 +3324,8 @@ function toBase64(bytes) {
 }
 
 // extension/src/popup.js
-var DEFAULT_GATEWAY = "http://localhost:8788";
+var DEFAULT_GATEWAY = true ? "http://localhost:8788" : "http://localhost:8788";
+var DEV_BUILD = DEFAULT_GATEWAY.startsWith("http://localhost");
 var GATEWAY_KEY = "pinesign.gateway";
 var el = (id) => document.getElementById(id);
 var identity = null;
@@ -3365,7 +3366,8 @@ function showName(record) {
 async function init() {
   identity = await getOrCreateIdentity();
   signer = localSigner(identity);
-  el("gateway").value = await stored(GATEWAY_KEY, DEFAULT_GATEWAY);
+  el("gateway").value = DEV_BUILD ? await stored(GATEWAY_KEY, DEFAULT_GATEWAY) : DEFAULT_GATEWAY;
+  if (!DEV_BUILD) document.querySelector(".foot").hidden = true;
   refreshMode();
   el("open-app").href = el("gateway").value.trim();
   const existing = await gateway().reverseName(identity.publicKeyHex);

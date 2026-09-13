@@ -17,7 +17,10 @@ import {
 import { getOrCreateIdentity } from '../../shared/identity.js'
 import { Gateway, localSigner, toBase64 } from '../../shared/client.js'
 
-const DEFAULT_GATEWAY = 'http://localhost:8788'
+// Compiled in by the server that built this extension. Only a dev build
+// (localhost) exposes the field for changing it.
+const DEFAULT_GATEWAY = typeof __PINESIGN_GATEWAY__ !== 'undefined' ? __PINESIGN_GATEWAY__ : 'http://localhost:8788'
+const DEV_BUILD = DEFAULT_GATEWAY.startsWith('http://localhost')
 const GATEWAY_KEY = 'pinesign.gateway'
 
 const el = (id) => document.getElementById(id)
@@ -68,7 +71,10 @@ function showName(record) {
 async function init() {
   identity = await getOrCreateIdentity()
   signer = localSigner(identity)
-  el('gateway').value = await stored(GATEWAY_KEY, DEFAULT_GATEWAY)
+  // A production build always talks to the server it came from; a stored
+  // override only applies in a dev build.
+  el('gateway').value = DEV_BUILD ? await stored(GATEWAY_KEY, DEFAULT_GATEWAY) : DEFAULT_GATEWAY
+  if (!DEV_BUILD) document.querySelector('.foot').hidden = true
 
   refreshMode()
 

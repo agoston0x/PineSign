@@ -1,6 +1,15 @@
 /** Bundles the browser code. */
 
+import './gateway/env.js' // PUBLIC_ORIGIN from .env, so the extension knows its server
 import { build } from 'esbuild'
+
+/**
+ * The extension is downloaded from the server that built it, so the server's
+ * own address is compiled in. A dev build with no PUBLIC_ORIGIN falls back to
+ * localhost and keeps the field editable.
+ */
+const GATEWAY = process.env.PUBLIC_ORIGIN ?? 'http://localhost:8788'
+console.log(`  extension gateway: ${GATEWAY}`)
 
 const targets = [
   { in: 'extension/src/popup.js', out: 'extension/lib/popup.bundle.js' },
@@ -24,6 +33,7 @@ for (const target of targets) {
     metafile: true,
     // The Circle SDK is imported from a CDN by URL; leave it to the browser.
     external: ['https://*'],
+    define: { __PINESIGN_GATEWAY__: JSON.stringify(GATEWAY) },
   })
   const bytes = Object.values(result.metafile.outputs)[0].bytes
   console.log(`  ${target.out}  ${(bytes / 1024).toFixed(0)}kb`)
