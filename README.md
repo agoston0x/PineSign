@@ -14,11 +14,30 @@ When Bob decrypts, a record is written to ENS under `<id>.tx.pinesign.eth`:
 both names and keys, both signatures, the file hash, the Swarm reference, timestamps.
 It is frozen on delivery. Not even the server that wrote it can change it.
 
-Anyone can verify it with a plain resolver call:
+## Verify a transfer yourself
 
+No PineSign server involved — read the resolver on Sepolia directly. A real transfer
+from the demo, `966e872faac33223ef0ab629cdd31b85.tx.pinesign.eth`:
+
+```bash
+RESOLVER=0xa7bdce7d8499a299d84406b0a29a33e4d515201c        # pinesign.eth's resolver
+NODE=$(cast namehash 966e872faac33223ef0ab629cdd31b85.tx.pinesign.eth)
+RPC=https://ethereum-sepolia-rpc.publicnode.com
+
+cast call $RESOLVER "text(bytes32,string)(string)" $NODE "sender"        --rpc-url $RPC
+cast call $RESOLVER "text(bytes32,string)(string)" $NODE "recipient"     --rpc-url $RPC
+cast call $RESOLVER "text(bytes32,string)(string)" $NODE "file.hash"     --rpc-url $RPC
+cast call $RESOLVER "text(bytes32,string)(string)" $NODE "recipient.sig" --rpc-url $RPC
+cast call $RESOLVER "frozen(bytes32)(bool)"        $NODE                 --rpc-url $RPC
 ```
-cast call <resolver> "text(bytes32,string)(string)" <namehash> "recipient.sig" --rpc-url <sepolia>
-```
+
+Keys: `sender`, `sender.key`, `sender.sig`, `recipient`, `recipient.key`, `file.name`,
+`file.commitment`, `file.hash`, `swarm`, `sent`, `recipient.sig`, `delivered`.
+
+The resolver is what the ENSv2 registry returns for `pinesign.eth`
+(`getResolver("pinesign")` on `0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2`), so the
+chain of trust starts at ENS, not at us. The same data is served for convenience at
+`/api/attestation/<id>`.
 
 ## How it holds up
 
