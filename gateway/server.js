@@ -603,6 +603,9 @@ app.get('/api/attestation/:id', requireHexParam('id', { length: 32 }), async (re
 
 app.get('/api/transfers', setup.requireSetupToken, async (_req, res) => res.json(await store.list()))
 
+// Clean URL for the demo video page, for the submission form.
+app.get('/demovideo', (_req, res) => res.sendFile(path.join(__dirname, '..', 'web', 'demovideo.html')))
+
 app.use(express.static(path.join(__dirname, '..', 'web')))
 
 app.listen(PORT, HOST, async () => {
