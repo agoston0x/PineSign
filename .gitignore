@@ -20,3 +20,6 @@ web/pinesign-extension.zip
 
 # Build outputs — npm run build regenerates them
 *.bundle.js
+
+# Keys, and anything else uploaded to a deployment by hand
+.local/
