@@ -1,3 +1,5 @@
+> Hackathon prototype from ETHRome 2026. Latest version is on main.
+
 # PineSign
 
 Verifiable file transfer. Encrypted on your machine, stored on Swarm, attested on ENS.
