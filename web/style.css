@@ -582,3 +582,7 @@ body.admin { background: linear-gradient(180deg, #101827 0%, #12161f 100%); back
 .inv-items .who { color: var(--text); }
 .inv-items .st { color: var(--haze); white-space: nowrap; }
 .inv-items .st.accepted { color: #7bd88f; }
+
+/* vertical (shorts) video, kept to a sane height on desktop */
+.yt { position: relative; width: min(100%, 420px); aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #000; }
+.yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

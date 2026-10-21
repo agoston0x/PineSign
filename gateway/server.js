@@ -25,6 +25,7 @@ import { keccak256, toHex as viemHex } from 'viem'
 import { issueNonce, requireSignature } from './auth.js'
 import { transferDigest, verify, fromHex, toHex } from '../shared/crypto.js'
 import { randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT ?? 8788
@@ -619,8 +620,21 @@ app.get('/api/attestation/:id', requireHexParam('id', { length: 32 }), async (re
 
 app.get('/api/transfers', setup.requireSetupToken, async (_req, res) => res.json(await store.list()))
 
-// Clean URL for the demo video page, for the submission form.
-app.get('/demovideo', (_req, res) => res.sendFile(path.join(__dirname, '..', 'web', 'demovideo.html')))
+/**
+ * Demo video page. The video is a deployment's own — a YouTube link in
+ * DEMO_VIDEO_URL — so the page is a template filled at serve time, and the
+ * repository carries nothing that belongs to one deployment.
+ */
+app.get('/demovideo', async (_req, res) => {
+  const url = process.env.DEMO_VIDEO_URL
+  if (!url) return res.status(404).send('No demo video configured. Set DEMO_VIDEO_URL.')
+  const id = url.match(/(?:shorts\/|v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/)?.[1]
+  if (!id) return res.status(500).send('DEMO_VIDEO_URL is not a YouTube link.')
+  const html = (await readFile(path.join(__dirname, '..', 'web', 'demovideo.html'), 'utf8'))
+    .replaceAll('__DEMO_EMBED__', `https://www.youtube.com/embed/${id}?rel=0`)
+    .replaceAll('__DEMO_URL__', url)
+  res.type('html').send(html)
+})
 
 // Bundles change on every deploy. Served with no-cache, the browser revalidates
 // each load (cheap, ETag) instead of running last week's code from its cache.
