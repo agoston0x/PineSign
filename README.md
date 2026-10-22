@@ -1,41 +1,24 @@
 # PineSign
 
-Verifiable file transfer. Encrypted on your machine, stored on Swarm, attested on ENS.
+Verifiable file transfer: if someone opens a file you sent, you get proof on Ethereum — unforgeable by either side.
 
-Built at ETHRome 2026. Live at https://pinesign.claws.page
+> Hackathon version (ETHRome 2026) and its full README: branch `ethrome-2026`.
 
-## The claim
+## Now (main, in progress)
+- Sign-in: email code + passkey. No vendor wallet, no extension.
+- Key: derived in the browser from the passkey (WebAuthn PRF → HKDF → secp256k1). Never stored, never sent.
+- Sign-in page: static, on Swarm, served at v1.pinesign.xyz by an allow-listed gateway.
+- Gateway: self-hostable, swappable. Uploads ciphertext to Swarm, sends emails, writes receipts to ENS.
+- Proof: unchanged — recipient must decrypt to claim; receipt frozen on chain.
 
-**If someone opens a file you sent through PineSign, you get proof they did — on chain,
-within seconds, verifiable by anyone, and impossible for either of you to fake or undo.**
+## Before (ethrome-2026)
+- Social sign-in creating a vendor wallet.
+- Desktop extension holding the key to encrypt and sign locally.
+- One server doing everything else.
+- Same proof, but through several permissioned gates.
 
-What makes it hold:
-
-1. **The recipient cannot claim without decrypting.** The sender publishes only a
-   *commitment* to the file hash, `keccak(hash)`. To claim, the recipient must present the
-   hash itself — and the only way to have it is to decrypt the file. Downloading the
-   ciphertext is not enough; signing something is not enough.
-2. **The recipient cannot deny it.** The claim carries their signature over the transfer
-   (both keys, the hash). Only their private key produces it.
-3. **The sender cannot forge it.** Without the recipient's signature there is no receipt.
-   The sender's own signature was written at send time, before the recipient saw anything.
-4. **The server cannot alter it.** The record is frozen on delivery. The resolver has no
-   function to unfreeze, and no owner who could add one.
-5. **Anyone can check it** by reading the resolver that ENS itself returns for the name —
-   no PineSign server in the loop. See *Verify a transfer yourself*.
-
-What it does **not** prove: that the recipient *read* or *agreed to* the contents. This is
-proof of delivery, in the sense registered mail is — nothing more, and nothing less.
-
-## What it does
-
-Alice invites Bob by email. Bob signs in with Google (Circle creates his wallet) and
-takes a name — `bob.pinesign.eth`. Alice's browser extension encrypts the file to Bob's
-key, the gateway stores the ciphertext on Swarm, and Bob opens it in any browser.
-
-When Bob decrypts, a record is written to ENS under `<id>.tx.pinesign.eth`:
-both names and keys, both signatures, the file hash, the Swarm reference, timestamps.
-It is frozen on delivery. Not even the server that wrote it can change it.
+## Still trusted
+Our gateway, DNS, registrar, VPS, and the allow-list owner.
 
 ## Verify a transfer yourself
 
@@ -67,92 +50,6 @@ The resolver is what the ENSv2 registry returns for `pinesign.eth`
 (`getResolver("pinesign")` on `0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2`), so the
 chain of trust starts at ENS, not at us. The same data is served for convenience at
 `/api/attestation/<id>`.
-
-## How it holds up
-
-- **No key is ever sent.** ECDH: each side derives the same secret from its own private
-  key and the other's public key.
-- **The gateway is blind.** It pays for storage and sees only ciphertext.
-- **Proof of decryption.** The sender commits to `keccak(fileHash)`; the recipient must
-  reveal `fileHash` to claim. You cannot claim without opening the file.
-- **Two privacy modes, the sender's choice.** *Private*: the recipient's key must live in
-  the extension, where no served code can reach it. *Receipted*: any browser holds the
-  key. Same proof either way.
-- **Expiry is passive.** The Swarm batch is sized to the transfer window; unclaimed
-  files just lapse.
-
-## What's in the repo
-
-| | |
-|---|---|
-| `gateway/` | Node server: Circle sign-in, invitations + email, Swarm upload, ENSv2 registration, on-chain attestation, admin panel |
-| `extension/` | Chrome extension: keypair, encrypt, send. Built with the server's address baked in |
-| `web/` | Lander, sign-up modal, claim page, admin panel |
-| `shared/` | Crypto (secp256k1 ECDH + AES-GCM), page↔extension bridge, key source |
-| `contracts/` | `PineSignReceipts` (write-once) · `PineSignResolver` (ENSIP-10 wildcard, frozen records) |
-| `docker-compose.yml` | Bee 2.8.2 light node on Gnosis |
-
-## Integrations
-
-- **Swarm** — Bee light node ships with the server; postage bought from the admin panel,
-  priced live from `/chainstate`. Every file lives on the real network.
-- **ENSv2 (Sepolia)** — the server registers its own name through the v2 registrar
-  (fee in test USDC, gas only), attaches a wildcard resolver, and writes each transfer's
-  attestation under a subname without minting a token per transfer.
-- **Circle** — user-controlled wallets via Google sign-in. Identity only; MPC keys can't do
-  ECDH, so encryption uses a separate key the name publishes.
-- **Resend** — four emails: invited, accepted, file ready, delivered.
-
-## Run your own
-
-Needs Node 22+, Docker, a domain with HTTPS (Google OAuth won't accept a bare IP).
-
-**1. Credentials**
-- Circle console → *User Controlled → Configurator*: copy the **App ID**; *Keys*: make an
-  **API key** (sending only)
-- Google Cloud → *Auth Platform → Clients → Web*: origin `https://yourdomain`, redirect
-  `https://yourdomain/app.html`. Copy the **Client ID**, paste it into Circle's
-  *Social Logins → Google*. Add test users, or publish the app.
-- Resend → add your domain, set its DNS records, make a sending key
-
-**2. Install**
-```bash
-git clone https://github.com/agoston0x/pinesign /opt/pinesign && cd /opt/pinesign
-npm install
-cat > .env <<'ENV'
-PORT=8788
-HOST=127.0.0.1
-PUBLIC_ORIGIN=https://yourdomain
-CIRCLE_API_KEY=
-CIRCLE_APP_ID=
-GOOGLE_CLIENT_ID=
-RESEND_API_KEY=
-MAIL_FROM=PineSign <noreply@yourdomain>
-BEE_URL=http://127.0.0.1:1633
-ENV
-npm run build
-npm start          # brings up the Bee node, then the gateway
-```
-Put `yourdomain { reverse_proxy localhost:8788 }` in Caddy (or equivalent). Firewall:
-22, 80, 443, and 1634 for Bee's P2P.
-
-**3. Set up** — the server prints an admin link. Open it, sign in with MetaMask to claim
-the server, then:
-1. choose a name (checked free on Sepolia *and* mainnet)
-2. generate the server wallet
-3. fund it from MetaMask — packages are priced live; the name costs gas only
-4. register the name, attach the resolver, deploy the receipt contract
-5. fund the Bee node (xDAI + BZZ on Gnosis, one click) and buy a postage batch
-
-The admin panel stays at `/setup.html`, wallet-gated. Back up `.storage/` — it holds
-the server's keys. Every generated key is also copied to `~/.pinesign/keys/`.
-
-## Tests
-
-```bash
-npm test               # gateway: 20 checks against a throwaway server
-npm run test:contracts # foundry: 14 tests
-```
 
 ## Contracts (Sepolia)
 
